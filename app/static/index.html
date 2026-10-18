@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ContextSwitch Studio — Gemma & Sentry Powered Prompt Engine</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="navbar">
+        <div class="brand">
+            <span class="logo-icon">⚡</span>
+            <h1>ContextSwitch <span class="tag">Studio</span></h1>
+        </div>
+        <div class="system-status">
+            <span class="pill" id="gemma-status">🧠 Gemma 2: Ready</span>
+            <span class="pill" id="sentry-status">📈 Sentry Traced</span>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- Navigation Tabs -->
+        <nav class="tabs-nav">
+            <button class="tab-btn active" id="tab-btn-compress" onclick="switchTab('compress')">🗜️ Prompt Compressor</button>
+            <button class="tab-btn" id="tab-btn-handoff" onclick="switchTab('handoff')">🔄 Context Handoff</button>
+        </nav>
+
+        <!-- Tab 1: Prompt Compressor -->
+        <section id="tab-compress" class="tab-pane active">
+            <div class="panel-grid">
+                <div class="card input-card">
+                    <div class="card-header">
+                        <h2>Input Prompt</h2>
+                        <div class="mode-select">
+                            <label for="compress-mode">Mode:</label>
+                            <select id="compress-mode">
+                                <option value="hybrid">⚡ Hybrid (Rules + Gemma 2)</option>
+                                <option value="rule">📏 Rule-Based Only</option>
+                                <option value="gemma">🧠 Pure Gemma 2</option>
+                            </select>
+                        </div>
+                    </div>
+                    <textarea id="compress-input" placeholder="Paste your verbose developer prompt here with code snippets or instructions..."></textarea>
+                    <div class="action-bar">
+                        <span id="input-token-count" class="token-count">0 tokens</span>
+                        <button id="btn-run-compress" class="primary-btn" onclick="runCompression()">Compress Prompt</button>
+                    </div>
+                </div>
+
+                <div class="card output-card">
+                    <div class="card-header">
+                        <h2>Compressed Output</h2>
+                        <button class="secondary-btn" id="btn-copy-compress" onclick="copyCompressed()">📋 Copy</button>
+                    </div>
+                    <textarea id="compress-output" readonly placeholder="Optimized prompt will appear here..."></textarea>
+                    <div class="metrics-bar">
+                        <div class="metric">
+                            <span class="label">Original:</span>
+                            <span id="stat-orig" class="val">0</span>
+                        </div>
+                        <div class="metric">
+                            <span class="label">Compressed:</span>
+                            <span id="stat-comp" class="val">0</span>
+                        </div>
+                        <div class="metric highlight">
+                            <span class="label">Tokens Saved:</span>
+                            <span id="stat-saved" class="val">0 (0%)</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Tab 2: Context Handoff -->
+        <section id="tab-handoff" class="tab-pane">
+            <div class="panel-grid">
+                <div class="card input-card">
+                    <div class="card-header">
+                        <h2>Developer Conversation / Log</h2>
+                        <input type="text" id="project-name-input" placeholder="Project Name (e.g., Hacktoberfest-App)" value="ContextSwitch-Core">
+                    </div>
+                    <textarea id="handoff-input" placeholder="Paste chat log, terminal output, or multi-turn discussion when switching AI models..."></textarea>
+                    <div class="action-bar">
+                        <button id="btn-run-handoff" class="primary-btn" onclick="runHandoff()">Generate Handoff Artifact</button>
+                    </div>
+                </div>
+
+                <div class="card output-card">
+                    <div class="card-header">
+                        <h2>Lossless Handoff Artifact (.md)</h2>
+                        <button class="secondary-btn" id="btn-copy-handoff" onclick="copyHandoff()">📋 Copy for Next LLM</button>
+                    </div>
+                    <textarea id="handoff-output" readonly placeholder="Universal System Prompt / Markdown handoff will appear here..."></textarea>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
