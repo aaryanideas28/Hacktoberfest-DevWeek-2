@@ -9,49 +9,82 @@ ContextPack is a FastAPI service with a small web UI that does two jobs:
 
 Both features share one safety principle: **nothing a model says is trusted**. Every model output is checked against the original text before it is returned, and the service falls back to deterministic rules when a check fails.
 
----
+## 🗺️ System Architecture
 
-## 🧭 Architecture
-
+```text
+               ┌──────────────────────────────────────┐
+               │         Web UI (app/static)          │
+               └──────────────────┬───────────────────┘
+                                  │
+                                  ▼
+               ┌──────────────────────────────────────┐
+               │          FastAPI (main.py)           │
+               └──────┬────────────────────────┬──────┘
+                      │                        │
+        POST /api/v1/compress            POST /api/v1/handoff
+                      │                        │
+                      ▼                        ▼
+         ┌────────────────────────┐  ┌────────────────────────┐
+         │      compressor.py     │  │      extractor.py      │
+         │  (Rule-based pre-pass) │  │  (Rules, always runs)  │
+         └────────────┬───────────┘  └────────────┬───────────┘
+                      │                           │
+                      ▼                           ▼
+         ┌────────────────────────┐  ┌────────────────────────┐
+         │      LLM Rewrite       │  │        gemma.py        │
+         │   (Generative pass)    │  │(Extraction, optional)  │
+         └────────────┬───────────┘  └────────────┬───────────┘
+                      │                           │
+                      ▼                           ▼
+         ┌────────────────────────┐  ┌────────────────────────┐
+         │  validation (protect.py)│  │ Verify vs Transcript   │
+         └────────────┬───────────┘  └────────────┬───────────┘
+                      │                           │
+                      ▼                           ▼
+         ┌────────────────────────┐  ┌────────────────────────┐
+         │     Fallback Layer     │  │ Merge & Create Artifact│
+         └────────────┬───────────┘  └────────────┬───────────┘
+                      │                           │
+                      └─────────────┬─────────────┘
+                                    │
+                                    ▼
+               ┌──────────────────────────────────────┐
+               │    LLM Engine Orchestrator           │
+               │    (generative.py / Google AI Studio)│
+               └──────────────────┬───────────────────┘
+                                  │
+                                  ▼
+               ┌──────────────────────────────────────┐
+               │       OpenRouter Integration         │
+               │    (Cache + 45s Circuit Breaker)     │
+               └──────────────────┬───────────────────┘
+                                  │
+                                  ▼
+               ┌──────────────────────────────────────┐
+               │  Optional Local Compression Engine   │
+               │  (gemma_entropy.py / Gemma 2 2B)     │
+               │  - Mathematical Surprisal Pruning    │
+               └──────────────────────────────────────┘
 ```
- Web UI (app/static)
-        |
-        v
- FastAPI (main.py)
-   |-- POST /api/v1/compress ---> compressor.py
-   |        rule pass -> LLM rewrite -> validation (protect.py) -> fallback
-   |
-   `-- POST /api/v1/handoff ----> extractor.py (rules, always runs)
-            + gemma.py (LLM extraction, optional)
-            -> verify against transcript -> merge -> Markdown artifact -> SQLite
 
- LLM calls (both features): generative.py
-   Google AI Studio  ->  OpenRouter   (cache + 45 s circuit breaker)
-
- Optional local engine: gemma_entropy.py (Gemma 2 2B token-surprisal pruning)
-```
 
 ### Project layout
-
-```
 app/
-  core/            Sentry tracing
-  routers/
-    compress.py    /api/v1/compress
-    handoff.py     /api/v1/handoff and snapshot read endpoints
-  services/
-    compressor.py  compression pipeline and validation
-    protect.py     protected-token detection (negations, numbers, quotes, <data>, code ...)
-    generative.py  LLM provider chain (rewrite + complete)
-    gemma.py       handoff extraction via the provider chain
-    extractor.py   rule-based extraction, LLM-output verification, Markdown formatter
-    gemma_entropy.py  optional local Gemma 2 2B pruning engine
-  static/          index.html, app.js, style.css
-  db.py            SQLite storage for handoff snapshots
-tests/             test_api, test_compressor, test_extractor, test_jumbo, test_main
-main.py            app entry point
-```
-
+├── core/               Sentry tracing
+├── routers/
+│   ├── compress.py     /api/v1/compress
+│   └── handoff.py      /api/v1/handoff and snapshot endpoints
+├── services/
+│   ├── compressor.py   compression pipeline and validation
+│   ├── protect.py      protected-token detection
+│   ├── generative.py   LLM provider chain (rewrite + complete)
+│   ├── gemma.py        handoff extraction via the provider chain
+│   ├── extractor.py    rule-based extraction, verification, Markdown formatter
+│   └── gemma_entropy.py  optional local Gemma 2 2B engine
+├── static/             index.html, app.js, style.css
+└── db.py               SQLite storage for snapshots
+tests/                  test_api, test_compressor, test_extractor, test_jumbo, test_main
+main.py                 app entry point
 ---
 
 ## ✂️ Prompt compression
@@ -187,16 +220,6 @@ pytest
 Provider behavior: Google is tried first, then OpenRouter. A provider that fails is skipped for 45 seconds, and identical requests are served from an in-memory cache (256 entries).
 
 `GET /api/v1/health` reports whether an LLM provider and Sentry are configured.
-
----
-
-## ☁️ Deploying to Vercel
-
-1. Import the repo with the **FastAPI** preset and use a lowercase project name (for example `contextpack`).
-2. Add environment variables: your LLM key(s), and `CONTEXTSWITCH_DB=/tmp/contextswitch.db`, because the Vercel filesystem is read-only except `/tmp`.
-3. Do not install `torch` or `transformers` on Vercel. They exceed the size limit, and the app only imports them if you use `gemma_entropy`.
-
-**Note:** `/tmp` is not persistent on serverless platforms, so saved snapshots can disappear between invocations. The handoff artifact is still generated and returned on every request. For durable history, use a hosted database or a host with a persistent disk.
 
 ---
 
