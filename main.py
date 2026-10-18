@@ -45,7 +45,10 @@ if os.path.exists(static_dir):
 # System Health / Status endpoint for UI badges
 @app.get("/api/v1/health")
 def health_check():
-    gemma_active = bool(os.getenv("GEMINI_API_KEY"))
+    # Any configured LLM provider counts (the app uses Google AI Studio, then OpenRouter).
+    gemma_active = bool(
+        os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("OPENROUTER_API_KEY")
+    )
     sentry_active = bool(os.getenv("SENTRY_DSN"))
     return {
         "status": "healthy",
@@ -69,7 +72,6 @@ class ConversationRequest(BaseModel):
 
 @app.post("/extract-context")
 def extract_context(request: ConversationRequest):
-    from app.services.extractor import extract_items
     return {
         "project_context": {
             "raw_conversation": request.conversation,
