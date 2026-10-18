@@ -99,3 +99,32 @@ def missing_critical(original: str, compressed: str) -> Dict[str, int]:
     o = Counter(m.group().lower() for m in _RX.finditer(original))
     c = Counter(m.group().lower() for m in _RX.finditer(compressed))
     return {k: v - c.get(k, 0) for k, v in o.items() if c.get(k, 0) < v}
+
+_orig_protected_spans = protected_spans
+_EXTRA_QUOTES = re.compile(r"“[^”]*”|‘[^’]*’|«[^»]*»")
+
+def protected_spans(text):
+    spans = list(_orig_protected_spans(text))
+    spans += [(m.start(), m.end()) for m in _EXTRA_QUOTES.finditer(text)]
+    spans.sort()
+    merged = []
+    for s, e in spans:
+        if merged and s <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+        else:
+            merged.append((s, e))
+    return merged
+
+_orig_missing_critical = missing_critical
+
+def missing_critical(original, compressed):
+    """Case-sensitive: every protected span must appear verbatim in the output."""
+    try:
+        result = dict(_orig_missing_critical(original, compressed) or {})
+        for s, e in protected_spans(original):
+            tok = original[s:e]
+            if tok not in compressed:
+                result[tok] = result.get(tok, 0) + 1
+        return result
+    except Exception:
+        return {"<check error>": 1}

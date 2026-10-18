@@ -31,9 +31,11 @@ def init_sentry():
         integrations=[FastApiIntegration()],
         traces_sample_rate=1.0,
         send_default_pii=False,
+        auto_enabling_integrations=False,
     )
     print(f"[Sentry] Initialized Sentry tracing in '{environment}' environment.")
     return True
+
 
 def record_compression_span(original_tokens: int, compressed_tokens: int, mode: str, tokens_saved: int = 0):
     """

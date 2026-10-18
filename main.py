@@ -1,26 +1,36 @@
 import os
+from dotenv import load_dotenv
+
+# 1. Load environment variables before any other imports
+load_dotenv()
+print("[startup] 1/5 .env loaded successfully.")
+print(f"[startup] Config: GOOGLE_API_KEY={'set' if os.getenv('GOOGLE_API_KEY') else 'not set'} | "
+      f"GEMINI_API_KEY={'set' if os.getenv('GEMINI_API_KEY') else 'not set'} | "
+      f"OPENROUTER_API_KEY={'set' if os.getenv('OPENROUTER_API_KEY') else 'not set'} | "
+      f"GEMMA_API_MODEL={os.getenv('GEMMA_API_MODEL', 'not set')}")
+
+# 2. Framework imports
+print("[startup] 2/5 Importing FastAPI & dependencies...")
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from dotenv import load_dotenv
 
+# 3. Tracing initialization
+print("[startup] 3/5 Initializing Sentry Tracing...")
 from app.core.sentry import init_sentry
-from app.routers import compress, handoff
-from app.db import init_db
-from app.services.extractor import extract_items
-
-# Load .env variables (GEMINI_API_KEY, SENTRY_DSN)
-load_dotenv()
-
-
-# Initialize Sentry Agent Tracing
 init_sentry()
 
-app = FastAPI(title="ContextSwitch")
-
-# Initialize SQLite database
+# 4. Routers and DB initialization
+print("[startup] 4/5 Initializing SQLite database...")
+from app.db import init_db
 init_db()
+
+print("[startup] 5/5 Mounting routers...")
+from app.routers import compress, handoff
+from app.services.extractor import extract_items
+
+app = FastAPI(title="ContextSwitch")
 
 # Mount API routers
 app.include_router(compress.router)
