@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ContextSwitch Studio — Gemma & Sentry Powered Prompt Engine</title>
+    <title>ContextSwitch Studio — Gemma 2 2B Neural Prompt Engine</title>
     <link rel="stylesheet" href="/static/style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -13,10 +13,10 @@
     <header class="navbar">
         <div class="brand">
             <span class="logo-icon">⚡</span>
-            <h1>ContextSwitch <span class="tag">Studio</span></h1>
+            <h1>ContextSwitch <span class="tag">Gemma 2 2B Studio</span></h1>
         </div>
         <div class="system-status">
-            <span class="pill" id="gemma-status">🧠 Gemma 2: Ready</span>
+            <span class="pill" id="gemma-status">🧠 Gemma 2 2B: Initializing...</span>
             <span class="pill" id="sentry-status">📈 Sentry Traced</span>
         </div>
     </header>
@@ -24,7 +24,7 @@
     <main class="container">
         <!-- Navigation Tabs -->
         <nav class="tabs-nav">
-            <button class="tab-btn active" id="tab-btn-compress" onclick="switchTab('compress')">🗜️ Prompt Compressor</button>
+            <button class="tab-btn active" id="tab-btn-compress" onclick="switchTab('compress')">🗜️ Gemma 2 2B Entropy Compressor</button>
             <button class="tab-btn" id="tab-btn-handoff" onclick="switchTab('handoff')">🔄 Context Handoff</button>
         </nav>
 
@@ -33,29 +33,45 @@
             <div class="panel-grid">
                 <div class="card input-card">
                     <div class="card-header">
-                        <h2>Input Prompt</h2>
+                        <h2>Input Developer Prompt</h2>
                         <div class="mode-select">
                             <label for="compress-mode">Mode:</label>
                             <select id="compress-mode">
-                                <option value="hybrid">⚡ Hybrid (Rules + Gemma 2)</option>
-                                <option value="rule">📏 Rule-Based Only</option>
-                                <option value="gemma">🧠 Pure Gemma 2</option>
+                                <option value="gemma_entropy" selected>⚡ Gemma 2 2B Perplexity Pruning (Zero-Gen Cost)</option>
+                                <option value="hybrid">🔄 Hybrid (Rules + Gemma Entropy)</option>
+                                <option value="rule">📏 Deterministic Rule-Based</option>
+                                <option value="gemma_generative">🧠 Gemma 2 Generative Rewrite</option>
                             </select>
                         </div>
                     </div>
-                    <textarea id="compress-input" placeholder="Paste your verbose developer prompt here with code snippets or instructions..."></textarea>
+                    <div class="drop-rate-select">
+                        <label for="drop-rate">Pruning Intensity (Tokens to Drop):</label>
+                        <select id="drop-rate">
+                            <option value="0.20">20% (Conservative)</option>
+                            <option value="0.30">30% (Moderate)</option>
+                            <option value="0.40" selected>40% (Recommended / Standard)</option>
+                            <option value="0.50">50% (Aggressive)</option>
+                        </select>
+                    </div>
+                    <textarea id="compress-input" placeholder="Paste your verbose developer prompt here with code snippets or instructions... (e.g., 'Can you please kindly help me write a function to connect SQLite with pooling? Thank you!')"></textarea>
                     <div class="action-bar">
                         <span id="input-token-count" class="token-count">0 tokens</span>
-                        <button id="btn-run-compress" class="primary-btn" onclick="runCompression()">Compress Prompt</button>
+                        <button id="btn-run-compress" class="primary-btn" onclick="runCompression()">Compress with Gemma 2</button>
                     </div>
                 </div>
 
                 <div class="card output-card">
                     <div class="card-header">
-                        <h2>Compressed Output</h2>
+                        <h2>Sparse Compressed Output</h2>
                         <button class="secondary-btn" id="btn-copy-compress" onclick="copyCompressed()">📋 Copy</button>
                     </div>
-                    <textarea id="compress-output" readonly placeholder="Optimized prompt will appear here..."></textarea>
+                    <textarea id="compress-output" readonly placeholder="Optimized token slice will appear here in sub-milliseconds..."></textarea>
+                    
+                    <div class="engine-badge-bar">
+                        <span class="info-tag" id="stat-engine">Engine: Ready</span>
+                        <span class="info-tag" id="stat-latency">Latency: -- ms</span>
+                    </div>
+
                     <div class="metrics-bar">
                         <div class="metric">
                             <span class="label">Original:</span>
@@ -79,8 +95,8 @@
             <div class="panel-grid">
                 <div class="card input-card">
                     <div class="card-header">
-                        <h2>Developer Conversation / Log</h2>
-                        <input type="text" id="project-name-input" placeholder="Project Name (e.g., Hacktoberfest-App)" value="ContextSwitch-Core">
+                        <h2>Developer Conversation / Debug Log</h2>
+                        <input type="text" id="project-name-input" placeholder="Project Name" value="ContextSwitch-Core">
                     </div>
                     <textarea id="handoff-input" placeholder="Paste chat log, terminal output, or multi-turn discussion when switching AI models..."></textarea>
                     <div class="action-bar">

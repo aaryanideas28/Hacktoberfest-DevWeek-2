@@ -8,9 +8,11 @@ from dotenv import load_dotenv
 from app.core.sentry import init_sentry
 from app.routers import compress, handoff
 from app.db import init_db
+from app.services.extractor import extract_items
 
 # Load .env variables (GEMINI_API_KEY, SENTRY_DSN)
 load_dotenv()
+
 
 # Initialize Sentry Agent Tracing
 init_sentry()

@@ -12,15 +12,44 @@ const compressInput = document.getElementById('compress-input');
 if (compressInput) {
     compressInput.addEventListener('input', (e) => {
         const text = e.target.value.trim();
-        const estTokens = Math.floor(text.length / 4);
+        const estTokens = text.length > 0 ? Math.max(1, Math.floor(text.length / 4)) : 0;
         document.getElementById('input-token-count').innerText = `${estTokens} tokens`;
     });
 }
+
+// Check system health on load to update UI badges
+async function checkHealth() {
+    try {
+        const res = await fetch('/api/v1/health');
+        if (res.ok) {
+            const data = await res.json();
+            const gemmaPill = document.getElementById('gemma-status');
+            const sentryPill = document.getElementById('sentry-status');
+
+            if (data.gemma_active) {
+                gemmaPill.innerText = "🧠 Gemma 2: Connected";
+                gemmaPill.classList.add("active-pill");
+            } else {
+                gemmaPill.innerText = "⚡ Gemma 2 2B: Local Entropy Engine";
+            }
+
+            if (data.sentry_active) {
+                sentryPill.innerText = "📈 Sentry: Tracing Live";
+            } else {
+                sentryPill.innerText = "📊 Tracing: Ready";
+            }
+        }
+    } catch (err) {
+        console.warn("Health check unreachable, running standalone:", err);
+    }
+}
+checkHealth();
 
 // Run compression via API
 async function runCompression() {
     const prompt = document.getElementById('compress-input').value;
     const mode = document.getElementById('compress-mode').value;
+    const dropRate = parseFloat(document.getElementById('drop-rate').value || "0.40");
     const btn = document.getElementById('btn-run-compress');
 
     if (!prompt.trim()) {
@@ -29,13 +58,17 @@ async function runCompression() {
     }
 
     btn.disabled = true;
-    btn.innerText = "Compressing...";
+    btn.innerText = "Computing Gemma Logits...";
 
     try {
-        const res = await fetch(`/api/v1/compress?mode=${mode}`, {
+        const res = await fetch(`/api/v1/compress`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
+            body: JSON.stringify({
+                prompt: prompt,
+                mode: mode,
+                drop_rate: dropRate
+            })
         });
 
         const data = await res.json();
@@ -43,10 +76,10 @@ async function runCompression() {
             document.getElementById('compress-output').value = data.compressed_prompt;
             document.getElementById('stat-orig').innerText = data.original_tokens;
             document.getElementById('stat-comp').innerText = data.compressed_tokens;
-            const pct = data.original_tokens > 0 
-                ? Math.round((data.tokens_saved / data.original_tokens) * 100) 
-                : 0;
-            document.getElementById('stat-saved').innerText = `${data.tokens_saved} (${pct}%)`;
+            document.getElementById('stat-saved').innerText = `${data.tokens_saved} (${data.compression_ratio}%)`;
+
+            document.getElementById('stat-engine').innerText = `Engine: ${data.engine_used}`;
+            document.getElementById('stat-latency').innerText = `Latency: ${data.latency_ms || '< 1'} ms`;
         } else {
             alert(data.detail || "Error compressing prompt.");
         }
@@ -55,7 +88,7 @@ async function runCompression() {
         alert("Failed to connect to backend server.");
     } finally {
         btn.disabled = false;
-        btn.innerText = "Compress Prompt";
+        btn.innerText = "Compress with Gemma 2";
     }
 }
 
@@ -71,7 +104,7 @@ async function runHandoff() {
     }
 
     btn.disabled = true;
-    btn.innerText = "Analyzing Context...";
+    btn.innerText = "Extracting Context...";
 
     try {
         const res = await fetch('/api/v1/handoff', {
@@ -98,10 +131,20 @@ async function runHandoff() {
 // Clipboard copy helpers
 function copyCompressed() {
     const text = document.getElementById('compress-output').value;
-    if (text) navigator.clipboard.writeText(text);
+    if (text) {
+        navigator.clipboard.writeText(text);
+        const btn = document.getElementById('btn-copy-compress');
+        btn.innerText = "✅ Copied!";
+        setTimeout(() => { btn.innerText = "📋 Copy"; }, 1500);
+    }
 }
 
 function copyHandoff() {
     const text = document.getElementById('handoff-output').value;
-    if (text) navigator.clipboard.writeText(text);
+    if (text) {
+        navigator.clipboard.writeText(text);
+        const btn = document.getElementById('btn-copy-handoff');
+        btn.innerText = "✅ Copied!";
+        setTimeout(() => { btn.innerText = "📋 Copy for Next LLM"; }, 1500);
+    }
 }

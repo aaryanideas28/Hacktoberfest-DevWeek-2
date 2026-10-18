@@ -84,3 +84,8 @@ def neural_extract_with_gemma(transcript: str) -> Optional[Dict[str, Any]]:
     except Exception as e:
         print(f"[Gemma] Neural extraction failed: {e}")
         return None
+
+# Aliases
+compress_with_gemma = neural_compress_with_gemma
+extract_context_with_gemma = neural_extract_with_gemma
+

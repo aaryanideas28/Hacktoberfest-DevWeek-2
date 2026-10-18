@@ -21,7 +21,7 @@ def handoff_endpoint(request: HandoffRequest):
     else:
         # Fallback to rule-based keyword extraction
         structured_data = extract_context_items(request.raw_transcript)
-
+    
     # Format into copyable System Prompt Artifact
     formatted_md = format_markdown_artifact(structured_data, request.project_name)
 
