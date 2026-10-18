@@ -1,305 +1,347 @@
 """
-Gemma 2 2B Token Entropy & Perplexity Pruning Engine.
+Gemma 2 2B token-entropy / perplexity pruning engine (app/services/gemma_entropy.py).
 
-Performs a single forward pass through Google Gemma 2 2B to compute token-level
-surprisal (self-information) / perplexity mask:
+One forward pass through Gemma 2 2B gives per-token surprisal:
     I(x_{i+1}) = -log P(x_{i+1} | x_{<=i})
 
-Filters out the lowest-information tokens (default bottom 40%) without invoking
-autoregressive text generation (model.generate()), achieving sub-millisecond
-forward-pass compression with zero generation token cost.
+Token surprisals are aggregated into WORD scores (mean over the word's tokens),
+and the lowest-scoring words are dropped. Dropping whole words (instead of
+sub-word tokens) avoids fragments, and rebuilding the text from the original
+string keeps spacing and line structure intact.
+
+Anything matched by app.services.protect (negations, numbers, quoted strings,
+ALL-CAPS keys, "TAG:" labels, [placeholders], non-ASCII text, code, <data>...</data>)
+is NEVER dropped, because "predictable" does not mean "unimportant"
+(e.g. "not" after "Do" has very low surprisal but flips the meaning).
+
+No autoregressive generation is performed. Latency is one forward pass:
+roughly tens to hundreds of ms on a GPU, much longer on CPU.
+
+Env vars:
+    HF_TOKEN                  Hugging Face token (Gemma weights are gated)
+    GEMMA_ENTROPY_WINDOW      max tokens per forward pass (default 2048)
 """
 
+import math
 import os
 import re
 import time
-import math
-from typing import List, Dict, Any, Optional, Tuple
+from bisect import bisect_right
+from typing import Any, Dict, List, Optional, Set, Tuple
 
-# Global cache for lazy-loaded model and tokenizer
+from app.services.protect import protected_spans
+
+DEFAULT_MODEL = "google/gemma-2-2b-it"
+_WINDOW = int(os.getenv("GEMMA_ENTROPY_WINDOW", "2048"))
+
+# Lazy-loaded globals
 _GEMMA_MODEL = None
 _GEMMA_TOKENIZER = None
 _DEVICE = None
+_LOAD_FAILED = False
 
-def get_device():
+# Single-entry cache so the safety retry loop in compressor.py does not
+# re-run the forward pass for the same prompt at a lower drop rate.
+_SCORE_CACHE: Dict[str, Any] = {"key": None, "scores": None}
+
+# Fallback mode: only words that are safe to delete (exact, lowercase match).
+SAFE_DROP = {
+    "a", "an", "the", "very", "really", "basically", "actually", "kindly", "of",
+}
+
+
+# --------------------------------------------------------------------------- #
+# Device / model loading
+# --------------------------------------------------------------------------- #
+def get_device() -> str:
     """Detect best available compute device (CUDA -> MPS -> CPU)."""
     global _DEVICE
     if _DEVICE is not None:
         return _DEVICE
     try:
-        import torch
+        import importlib
+        torch = importlib.import_module("torch")
+
         if torch.cuda.is_available():
             _DEVICE = "cuda"
         elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
             _DEVICE = "mps"
         else:
             _DEVICE = "cpu"
-    except ImportError:
+    except Exception:
         _DEVICE = "cpu"
     return _DEVICE
 
-def load_gemma_local_model(model_name: str = "google/gemma-2-2b-it"):
+
+def load_gemma_local_model(model_name: str = DEFAULT_MODEL):
     """
-    Lazy-load Gemma 2 2B causal language model & tokenizer.
-    Returns (model, tokenizer) or (None, None) if torch/transformers are missing.
+    Lazy-load Gemma 2 causal LM + tokenizer.
+    Returns (model, tokenizer) or (None, None). A failed load is remembered so
+    later requests do not pay the retry cost.
     """
-    global _GEMMA_MODEL, _GEMMA_TOKENIZER
+    global _GEMMA_MODEL, _GEMMA_TOKENIZER, _LOAD_FAILED
     if _GEMMA_MODEL is not None and _GEMMA_TOKENIZER is not None:
         return _GEMMA_MODEL, _GEMMA_TOKENIZER
+    if _LOAD_FAILED:
+        return None, None
 
     try:
-        import torch
-        from transformers import AutoTokenizer, AutoModelForCausalLM
+        import importlib
+        torch = importlib.import_module("torch")
+        transformers = importlib.import_module("transformers")
+        AutoModelForCausalLM = transformers.AutoModelForCausalLM
+        AutoTokenizer = transformers.AutoTokenizer
 
         device = get_device()
+        hf_token = os.getenv("HF_TOKEN") or None
         print(f"[Gemma Engine] Initializing {model_name} on device: {device}")
 
-        torch_dtype = torch.bfloat16 if device == "cuda" else torch.float32
+        dtype = torch.bfloat16 if device == "cuda" else torch.float32
 
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        tokenizer = AutoTokenizer.from_pretrained(model_name, token=hf_token)
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
-            torch_dtype=torch_dtype,
+            torch_dtype=dtype,
             low_cpu_mem_usage=True,
+            attn_implementation="eager",  # recommended for Gemma 2
+            token=hf_token,
         )
         model.to(device)
         model.eval()
 
-        _GEMMA_MODEL = model
-        _GEMMA_TOKENIZER = tokenizer
+        _GEMMA_MODEL, _GEMMA_TOKENIZER = model, tokenizer
         return _GEMMA_MODEL, _GEMMA_TOKENIZER
-    except Exception as e:
-        print(f"[Gemma Engine] Local model loading unavailable ({e}). Using deterministic self-information fallback.")
+    except Exception as e:  # noqa: BLE001
+        _LOAD_FAILED = True
+        print(
+            f"[Gemma Engine] Local model unavailable ({e}). "
+            "Using protected filler-word fallback. "
+            "(Gemma is gated: accept the license on Hugging Face and set HF_TOKEN.)"
+        )
+
         return None, None
 
-def _extract_protected_spans(text: str) -> List[Tuple[int, int]]:
-    """
-    Find character ranges that should NEVER be dropped (fenced code blocks, URLs).
-    """
-    spans = []
-    # Protect fenced code blocks ``` ... ```
-    for match in re.finditer(r"```[\s\S]*?```", text):
-        spans.append(match.span())
-    # Protect inline code ` ... `
-    for match in re.finditer(r"`[^`\n]+`", text):
-        spans.append(match.span())
-    return spans
 
+def reset_model_cache() -> None:
+    """Forget a failed load (e.g. after setting HF_TOKEN) without restarting."""
+    global _LOAD_FAILED
+    _LOAD_FAILED = False
+
+
+def count_tokens(text: str) -> int:
+    """
+    Token count using the Gemma tokenizer when it is loaded, else ~4 chars/token.
+    Use this for BOTH original and compressed counts so ratios share one unit.
+    """
+    if not text or not text.strip():
+        return 0
+    if _GEMMA_TOKENIZER is not None:
+        try:
+            return len(_GEMMA_TOKENIZER(text, add_special_tokens=False)["input_ids"])
+        except Exception:  # noqa: BLE001
+            pass
+    return max(1, len(text.strip()) // 4)
+
+
+# --------------------------------------------------------------------------- #
+# Word helpers
+# --------------------------------------------------------------------------- #
+def _word_spans(text: str) -> List[Tuple[int, int]]:
+    return [(m.start(), m.end()) for m in re.finditer(r"\S+", text)]
+
+
+def _protected_flags(words: List[Tuple[int, int]], spans: List[Tuple[int, int]]) -> List[bool]:
+    """A word is protected if it overlaps any protected span. Spans are merged+sorted."""
+    starts = [s for s, _ in spans]
+    flags: List[bool] = []
+    for ws, we in words:
+        i = bisect_right(starts, we - 1) - 1
+        flags.append(i >= 0 and spans[i][1] > ws)
+    return flags
+
+
+def _rebuild(text: str, words: List[Tuple[int, int]], drop: Set[int]) -> str:
+    """Rebuild text from the original string, omitting dropped words but keeping layout."""
+    out: List[str] = []
+    prev_end = 0
+    for i, (s, e) in enumerate(words):
+        prefix = text[prev_end:s]
+        if i in drop:
+            if "\n" in prefix:  # keep line breaks even if the word is gone
+                out.append(prefix)
+        else:
+            out.append(prefix)
+            out.append(text[s:e])
+        prev_end = e
+    out.append(text[prev_end:])
+    return "".join(out).strip()
+
+
+# --------------------------------------------------------------------------- #
+# Model scoring
+# --------------------------------------------------------------------------- #
+def _token_surprisals(ids: List[int], model, tokenizer, device: str, window: int) -> List[float]:
+    """
+    Per-token NLL for every token id. Token 0 (BOS) gets +inf.
+    Long inputs are processed in windows (BOS re-prepended) and the NLL is
+    computed in row slices to keep the 256k-vocab logits memory bounded.
+    """
+    import importlib
+    torch = importlib.import_module("torch")
+    F = importlib.import_module("torch.nn.functional")
+
+    scores = [float("inf")] * len(ids)
+
+    bos = tokenizer.bos_token_id
+    start = 0
+    while start < len(ids):
+        chunk = ids[start:start + window]
+        if start > 0 and bos is not None:
+            inp, offset = [bos] + chunk, 1
+        else:
+            inp, offset = chunk, 0
+        if len(inp) < 2:
+            break
+
+        t = torch.tensor([inp], device=device)
+        with torch.no_grad():
+            logits = model(input_ids=t).logits[0]  # [L, V]
+
+        parts = []
+        for s in range(0, logits.size(0) - 1, 256):
+            e = min(s + 256, logits.size(0) - 1)
+            parts.append(F.cross_entropy(logits[s:e].float(), t[0, s + 1:e + 1], reduction="none"))
+        nll = torch.cat(parts).tolist()  # nll[j] scores inp[j + 1]
+
+        for k in range(len(chunk)):
+            inp_idx = k + offset
+            if inp_idx >= 1:
+                scores[start + k] = nll[inp_idx - 1]
+        start += window
+    return scores
+
+
+def _word_scores(prompt: str, words: List[Tuple[int, int]], model, tokenizer, model_name: str) -> List[Optional[float]]:
+    """Mean token surprisal per word (None if a word received no scored token)."""
+    key = f"{model_name}\x00{prompt}"
+    if _SCORE_CACHE["key"] == key:
+        return _SCORE_CACHE["scores"]
+
+    device = get_device()
+    enc = tokenizer(prompt, return_offsets_mapping=True, add_special_tokens=True)
+    ids = enc["input_ids"]
+    offsets = enc["offset_mapping"]
+    tok_scores = _token_surprisals(ids, model, tokenizer, device, _WINDOW)
+
+    starts = [s for s, _ in words]
+    sums = [0.0] * len(words)
+    counts = [0] * len(words)
+    for (cs, ce), sc in zip(offsets, tok_scores):
+        if ce <= cs or math.isinf(sc):
+            continue  # special tokens / BOS
+        last = ce - 1  # last char of a token is never leading whitespace
+        wi = bisect_right(starts, last) - 1
+        if wi < 0 or last >= words[wi][1]:
+            continue  # whitespace-only token
+        sums[wi] += sc
+        counts[wi] += 1
+
+    result: List[Optional[float]] = [
+        (sums[i] / counts[i]) if counts[i] else None for i in range(len(words))
+    ]
+    _SCORE_CACHE["key"], _SCORE_CACHE["scores"] = key, result
+    return result
+
+
+# --------------------------------------------------------------------------- #
+# Result helpers
+# --------------------------------------------------------------------------- #
+def _result(original: str, compressed: str, start_time: float, engine: str) -> Dict[str, Any]:
+    orig_t = count_tokens(original)
+    comp_t = count_tokens(compressed)
+    saved = max(0, orig_t - comp_t)
+    return {
+        "compressed_prompt": compressed,
+        "original_tokens": orig_t,
+        "compressed_tokens": comp_t,
+        "tokens_saved": saved,
+        "compression_ratio": round((saved / orig_t) * 100, 2) if orig_t > 0 else 0.0,
+        "latency_ms": round((time.perf_counter() - start_time) * 1000, 2),
+        "engine": engine,
+    }
+
+
+def _empty_result() -> Dict[str, Any]:
+    return {
+        "compressed_prompt": "",
+        "original_tokens": 0,
+        "compressed_tokens": 0,
+        "tokens_saved": 0,
+        "compression_ratio": 0.0,
+        "latency_ms": 0.0,
+        "engine": "none",
+    }
+
+
+# --------------------------------------------------------------------------- #
+# Public entry point
+# --------------------------------------------------------------------------- #
 def compress_via_gemma_entropy(
     prompt: str,
     drop_rate: float = 0.40,
-    model_name: str = "google/gemma-2-2b-it",
+    model_name: str = DEFAULT_MODEL,
 ) -> Dict[str, Any]:
     """
-    Perform token-level perplexity / surprisal pruning on prompt using Gemma 2 2B.
+    Word-level perplexity pruning with Gemma 2 2B.
 
     Args:
-        prompt: Raw developer input prompt.
-        drop_rate: Fraction of lowest-information tokens to drop (default 0.40 = 40%).
-        model_name: Gemma model identifier.
+        prompt: raw prompt text.
+        drop_rate: fraction of NON-PROTECTED words to drop (0.0 - 0.9).
+        model_name: Hugging Face model id.
 
-    Returns:
-        Dict containing:
-            - compressed_prompt: The pruned prompt reconstructed in sequential order.
-            - original_tokens: Total token count.
-            - compressed_tokens: Tokens remaining after pruning.
-            - tokens_saved: Tokens pruned.
-            - compression_ratio: Percentage reduction.
-            - latency_ms: Execution duration in milliseconds.
-            - engine: Execution mode used ("gemma-2-2b-forward-pass" or "information-theoretic-fallback").
+    Returns dict with: compressed_prompt, original_tokens, compressed_tokens,
+    tokens_saved, compression_ratio, latency_ms, engine.
+    engine is "gemma-2-2b-forward-pass" or "protected-filler-fallback".
     """
     start_time = time.perf_counter()
 
     if not prompt or not prompt.strip():
-        return {
-            "compressed_prompt": "",
-            "original_tokens": 0,
-            "compressed_tokens": 0,
-            "tokens_saved": 0,
-            "compression_ratio": 0.0,
-            "latency_ms": 0.0,
-            "engine": "none",
-        }
+        return _empty_result()
 
-    # Attempt to use local PyTorch / Transformers Gemma 2 2B forward pass
+    drop_rate = max(0.0, min(0.9, float(drop_rate)))
+
+    words = _word_spans(prompt)
+    if len(words) <= 4:
+        return _result(prompt, prompt, start_time, "none (prompt too short)")
+
+    flags = _protected_flags(words, protected_spans(prompt))
+    flags[0] = True
+    flags[-1] = True
+
+    drop: Optional[Set[int]] = None
+    engine = "protected-filler-fallback"
+
     model, tokenizer = load_gemma_local_model(model_name)
-
     if model is not None and tokenizer is not None:
         try:
-            import torch
-            device = get_device()
+            scores = _word_scores(prompt, words, model, tokenizer, model_name)
+            eligible = [i for i in range(len(words)) if not flags[i] and scores[i] is not None]
+            k = int(len(eligible) * drop_rate)
+            eligible.sort(key=lambda i: scores[i])  # lowest surprisal = most predictable
+            drop = set(eligible[:k])
+            engine = "gemma-2-2b-forward-pass"
+        except Exception as e:  # noqa: BLE001
+            print(f"[Gemma Engine] Forward pass failed ({e}); using protected filler fallback.")
+            drop = None
 
-            # Tokenize with character offset mappings to protect code blocks
-            encoded = tokenizer(
-                prompt,
-                return_offsets_mapping=True,
-                return_tensors="pt"
-            )
-            input_ids = encoded["input_ids"].to(device)
-            offset_mapping = encoded["offset_mapping"][0].tolist()
-            seq_len = input_ids.shape[1]
-
-            if seq_len <= 3:
-                # Prompt too short to compress
-                elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
-                return {
-                    "compressed_prompt": prompt,
-                    "original_tokens": seq_len,
-                    "compressed_tokens": seq_len,
-                    "tokens_saved": 0,
-                    "compression_ratio": 0.0,
-                    "latency_ms": elapsed_ms,
-                    "engine": "gemma-2-2b-forward-pass",
-                }
-
-            # --- Single Forward Pass (Zero Generation Cost) ---
-            with torch.no_grad():
-                outputs = model(input_ids=input_ids)
-                logits = outputs.logits  # [1, seq_len, vocab_size]
-
-            # Autoregressive loss: logits[i] predicts token input_ids[i + 1]
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = input_ids[..., 1:].contiguous()
-
-            loss_fct = torch.nn.CrossEntropyLoss(reduction="none")
-            # Per-token surprisal / NLL: -log P(x_{i+1} | x_{<=i})
-            surprisals = loss_fct(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1)
-            ).view(1, -1)[0].tolist()
-
-            # Token 0 has no preceding context; assign high surprisal to preserve sentence start
-            token_scores = [float("inf")] + surprisals
-
-            # Identify protected tokens (within code fences)
-            protected_spans = _extract_protected_spans(prompt)
-            protected_indices = set()
-            for idx, (char_start, char_end) in enumerate(offset_mapping):
-                for span_start, span_end in protected_spans:
-                    if char_start >= span_start and char_end <= span_end:
-                        protected_indices.add(idx)
-                        break
-
-            # Always keep first token, last token, and code blocks
-            protected_indices.add(0)
-            protected_indices.add(seq_len - 1)
-
-            # Candidate tokens eligible for pruning
-            candidates = [
-                (idx, token_scores[idx])
-                for idx in range(seq_len)
-                if idx not in protected_indices
-            ]
-
-            num_to_drop = int(len(candidates) * drop_rate)
-            # Sort candidates by surprisal (ascending: lowest self-information first)
-            candidates.sort(key=lambda x: x[1])
-
-            drop_indices = set(idx for idx, _ in candidates[:num_to_drop])
-
-            # Preserve sequential order of remaining tokens
-            kept_indices = [idx for idx in range(seq_len) if idx not in drop_indices]
-            kept_token_ids = [input_ids[0, idx].item() for idx in kept_indices]
-
-            compressed_prompt = tokenizer.decode(kept_token_ids, skip_special_tokens=True).strip()
-            elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
-            saved = len(drop_indices)
-
-            return {
-                "compressed_prompt": compressed_prompt,
-                "original_tokens": seq_len,
-                "compressed_tokens": len(kept_indices),
-                "tokens_saved": saved,
-                "compression_ratio": round((saved / seq_len) * 100, 2),
-                "latency_ms": elapsed_ms,
-                "engine": "gemma-2-2b-forward-pass",
-            }
-        except Exception as e:
-            print(f"[Gemma Engine] GPU forward-pass failed ({e}), falling back to deterministic information filter.")
-
-    # --- Fallback: Deterministic Information-Theoretic Token Filter ---
-    # Used when torch/transformers or Gemma weights are not locally hosted
-    return _fallback_information_theoretic_pruning(prompt, drop_rate, start_time)
-
-def _fallback_information_theoretic_pruning(prompt: str, drop_rate: float, start_time: float) -> Dict[str, Any]:
-    """
-    High-speed deterministic self-information compression.
-    Scores words based on linguistic entropy & filler probability.
-    Predictable grammatical boilerplate has near-zero surprisal and gets dropped.
-    """
-    # Protect code blocks
-    code_blocks = re.findall(r"```[\s\S]*?```", prompt)
-    placeholder_map = {}
-    temp_text = prompt
-    for idx, block in enumerate(code_blocks):
-        key = f"__CODE_BLOCK_{idx}__"
-        placeholder_map[key] = block
-        temp_text = temp_text.replace(block, key)
-
-    words = temp_text.split()
-    total_tokens = max(1, len(prompt) // 4)
-
-    if len(words) <= 4:
-        elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
-        return {
-            "compressed_prompt": prompt,
-            "original_tokens": total_tokens,
-            "compressed_tokens": total_tokens,
-            "tokens_saved": 0,
-            "compression_ratio": 0.0,
-            "latency_ms": elapsed_ms,
-            "engine": "information-theoretic-fallback",
+    if drop is None:
+        # Deterministic fallback: delete only safe articles/intensifiers.
+        # drop_rate is ignored here on purpose; length-based scoring is what
+        # used to delete "not", digits and "TAG:".
+        drop = {
+            i for i, (s, e) in enumerate(words)
+            if not flags[i] and prompt[s:e] in SAFE_DROP
         }
 
-    # Pre-calculated empirical self-information scores (lower = predictable filler / low entropy)
-    FILLER_LOW_ENTROPY = {
-        "can": 0.1, "you": 0.1, "please": 0.05, "could": 0.1, "would": 0.1,
-        "like": 0.2, "to": 0.1, "help": 0.15, "me": 0.1, "i": 0.1,
-        "am": 0.1, "want": 0.2, "just": 0.15, "kindly": 0.05, "as": 0.2,
-        "an": 0.15, "ai": 0.2, "language": 0.2, "model": 0.2, "thank": 0.05,
-        "thanks": 0.05, "in": 0.2, "order": 0.2, "make": 0.25, "sure": 0.2,
-        "that": 0.2, "very": 0.15, "really": 0.15, "basically": 0.1,
-    }
-
-    scored_words = []
-    for idx, w in enumerate(words):
-        clean = w.lower().strip(",.?!:;()\"'")
-        if w.startswith("__CODE_BLOCK_"):
-            score = 999.0  # Never drop code
-        elif idx == 0 or idx == len(words) - 1:
-            score = 50.0   # Preserve sentence boundaries
-        else:
-            # Low score for common filler, higher score for longer/specific tokens
-            base_entropy = FILLER_LOW_ENTROPY.get(clean, math.log2(len(clean) + 2) + 1.0)
-            score = base_entropy
-        scored_words.append((idx, w, score))
-
-    # Eligible words to drop (excluding protected ones)
-    eligible = [sw for sw in scored_words if sw[2] < 100.0]
-    num_to_drop = int(len(eligible) * drop_rate)
-
-    eligible.sort(key=lambda x: x[2])
-    drop_indices = set(sw[0] for sw in eligible[:num_to_drop])
-
-    kept_words = [w for idx, w, _ in scored_words if idx not in drop_indices]
-    reconstructed = " ".join(kept_words)
-
-    # Restore code blocks
-    for key, block in placeholder_map.items():
-        reconstructed = reconstructed.replace(key, block)
-
-    reconstructed = re.sub(r"\s+", " ", reconstructed).strip()
-
-    compressed_tokens = max(1, len(reconstructed) // 4)
-    saved_tokens = max(0, total_tokens - compressed_tokens)
-    elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
-
-    return {
-        "compressed_prompt": reconstructed,
-        "original_tokens": total_tokens,
-        "compressed_tokens": compressed_tokens,
-        "tokens_saved": saved_tokens,
-        "compression_ratio": round((saved_tokens / total_tokens) * 100, 2) if total_tokens > 0 else 0.0,
-        "latency_ms": elapsed_ms,
-        "engine": "information-theoretic-fallback",
-    }
+    compressed = _rebuild(prompt, words, drop)
+    return _result(prompt, compressed, start_time, engine)

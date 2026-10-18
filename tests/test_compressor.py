@@ -24,7 +24,7 @@ def test_gemma_entropy_pruning():
     assert res["compressed_prompt"] != ""
     assert res["tokens_saved"] >= 0
     assert "latency_ms" in res
-    assert res["engine"] in ["gemma-2-2b-forward-pass", "information-theoretic-fallback"]
+    assert res["engine"] in ["gemma-2-2b-forward-pass", "information-theoretic-fallback", "protected-filler-fallback"]
 
 def test_gemma_entropy_protects_code():
     prompt = "Please optimize this function:\n```python\ndef add(a, b):\n    return a + b\n```\nThanks a lot."
@@ -38,3 +38,10 @@ def test_unified_compress_modes():
 
     res_entropy = compress_prompt(prompt, mode="gemma_entropy")
     assert res_entropy["tokens_saved"] >= 0
+
+def test_critical_tokens_protected():
+    prompt = "Do not delete table users and keep port 8080 under all circumstances."
+    res = compress_prompt(prompt, mode="hybrid")
+    assert "not" in res["compressed_prompt"].lower()
+    assert "8080" in res["compressed_prompt"]
+

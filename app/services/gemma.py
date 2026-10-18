@@ -17,9 +17,11 @@ def get_gemma_client():
     if not api_key:
         return None
     try:
-        import google.generativeai as genai
+        import importlib
+        genai = importlib.import_module("google.generativeai")
         genai.configure(api_key=api_key)
         return genai.GenerativeModel(GEMMA_MODEL_NAME)
+
     except Exception as e:
         print(f"[Gemma] Error initializing model client: {e}")
         return None
