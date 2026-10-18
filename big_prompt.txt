@@ -1,0 +1,1613 @@
+Viewed state.ts:1-218
+Viewed llmRunner.ts:1-102
+Viewed languageResolver.ts:1-149
+Viewed astParser.ts:1-150
+Searched for "getLanguageFromPath"
+Listed directory graph
+Listed directory src
+Searched for "StateGraph"
+Searched for "addNode"
+Searched for "@langchain/langgraph"
+Viewed index.ts:1-100
+Viewed index.ts:101-250
+Viewed index.ts:251-399
+Searched for "graph"
+Viewed server.ts:1280-1460
+Viewed server.ts:1460-1570
+Viewed webviewProvider.ts:800-950
+Searched for "generatedPatch"
+Searched for "filePatches"
+Searched for "planApprovalStatus"
+Searched for "rejectionReason"
+Searched for "rejectedPlans"
+Searched for "planFailureReason"
+Searched for "generationFailureReason"
+Searched for "targetFiles"
+Searched for "state.targetFiles"
+Searched for "state.plan"
+Viewed reviewerAgent.ts:1-100
+Viewed reviewerAgent.ts:101-151
+Listed directory agents
+Listed directory tools
+Viewed codeGenAgent.ts:1-15
+Viewed plannerAgent.ts:1-15
+Viewed contextRetrievalAgent.ts:1-15
+Viewed contextSufficiencyAgent.ts:1-15
+Viewed debuggerAgent.ts:1-15
+Viewed intentAgent.ts:1-15
+Viewed responseFilterAgent.ts:1-15
+Viewed browserSnapshotParser.ts:1-15
+Viewed debug-validator.ts:1-15
+Viewed dockerSandbox.ts:1-15
+Viewed graphifyEngine.ts:1-15
+Viewed langfuseTracer.ts:1-15
+Viewed ocrService.ts:1-15
+Viewed permissionGate.ts:1-15
+Viewed persistenceEngine.ts:1-15
+Viewed testRunner.ts:1-15
+Viewed universalValidator.ts:1-15
+Viewed webSearchTool.ts:1-15
+Viewed package.json:1-74
+Viewed tsconfig.json:1-16
+Searched for "process\.env\.[A-Za-z0-9_]+"
+Searched for "process\.env\["
+Ran command: `npx tsc --noEmit`
+Listed directory sandbox
+Used tool: manage_task
+
+I have launched `npx tsc --noEmit` and am waiting for it to finish.Notice: A task has completed. Prioritize processing its output and addressing any associated instructions.
+Task id: 5554a2c0-85e1-4c14-acfa-4fdb9588b3fb/task-202
+Command: npx tsc --noEmit
+Exit code: 0
+Execution details:
+Command npx tsc --noEmit completed with code 0.
+Output:
+None
+Log file location: C:\Users\ADMIN\.gemini\antigravity-ide\brain\5554a2c0-85e1-4c14-acfa-4fdb9588b3fb\.system_generated\tasks\task-202.log
+
+Task id: 5554a2c0-85e1-4c14-acfa-4fdb9588b3fb/task-202 has completed.
+
+
+Viewed task-202.log
+
+## 1. state.ts: FULL CONTENTS
+
+File path: [src/state.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/state.ts) (Lines 1–218)
+
+```typescript
+import { Annotation } from '@langchain/langgraph';
+
+export interface PlanStep {
+  id: number;
+  description: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  targetFile?: string;
+  language?: string;
+  action?: string;
+  isNewFile?: boolean;
+  dependencies?: string[];
+  requiresApproval?: boolean;
+  appliedPatch?: boolean;
+  userApprovedFile?: boolean;
+  patchId?: string;
+  planVersion?: number;
+}
+export const KaizenState = Annotation.Root({
+  sessionId: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  planAttempt: Annotation<number>({
+    reducer: (_, y) => y,
+    default: () => 0
+  }),
+
+  rejectedPlans: Annotation<string[]>({
+    reducer: (_, y) => y,
+    default: () => []
+  }),
+
+  planFailureReason: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  createdAt: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  userInput: Annotation<string>(),
+
+  requestedLanguage: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  languageInfo: Annotation<{ requested?: string; source?: string; confidence?: string } | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  generationSource: Annotation<'llm' | 'fallback' | 'retry' | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  generationFailureReason: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  targetFiles: Annotation<string[]>({
+    reducer: (x, y) => Array.from(new Set([...x, ...y])),
+    default: () => []
+  }),
+
+  extractedContext: Annotation<string>({
+    reducer: (_, y) => y,
+    default: () => ""
+  }),
+
+  plan: Annotation<PlanStep[]>({
+    reducer: (x, y) => {
+      if (!x.length) return y;
+      if (y.length && y[0].planVersion !== undefined && y[0].planVersion !== x[0]?.planVersion) return y;
+      const merged = [...x];
+      for (const updatedStep of y) {
+        const idx = merged.findIndex(s => s.id === updatedStep.id);
+        if (idx !== -1) merged[idx] = { ...merged[idx], ...updatedStep };
+        else merged.push(updatedStep);
+      }
+      return merged;
+    },
+    default: () => []
+  }),
+
+  generatedPatch: Annotation<string>({
+    reducer: (_, y) => y,
+    default: () => ""
+  }),
+
+  choices: Annotation<string[]>({
+    reducer: (_, y) => y,
+    default: () => []
+  }),
+
+  retryCount: Annotation<number>({
+    reducer: (x, y) => y !== undefined ? y : x,
+    default: () => 0
+  }),
+
+  // ✅ ADD THESE NEW FIELDS
+  lastPlan: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  planTimestamp: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  canRetry: Annotation<boolean>({
+    reducer: (_, y) => y,
+    default: () => true
+  }),
+
+  rejectionReason: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  status: Annotation<string>({
+    reducer: (_, y) => y,
+    default: () => "INITIALIZED"
+  }),
+
+  runId: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  lifecycleStatus: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => "INITIALIZED"
+  }),
+
+  currentStage: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => "intent"
+  }),
+
+  completedStages: Annotation<string[] | undefined>({
+    reducer: (x, y) => Array.from(new Set([...(x || []), ...(y || [])])),
+    default: () => []
+  }),
+
+  skippedStages: Annotation<string[] | undefined>({
+    reducer: (x, y) => Array.from(new Set([...(x || []), ...(y || [])])),
+    default: () => []
+  }),
+
+  generalAnswer: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  imagePayload: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  extractedImageText: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  permissionMode: Annotation<'deny_first' | 'auto_mode'>({
+    reducer: (_, y) => y,
+    default: () => 'deny_first'
+  }),
+
+  riskScore: Annotation<number>({
+    reducer: (_, y) => y,
+    default: () => 0
+  }),
+
+  permissionStatus: Annotation<'APPROVED' | 'REJECTED' | 'PENDING_APPROVAL' | 'AUTO_APPROVED'>({
+    reducer: (_, y) => y,
+    default: () => 'AUTO_APPROVED'
+  }),
+
+  mcpActions: Annotation<Array<{ tool: string; action: string; status: string; output?: string }>>({
+    reducer: (x, y) => [...(x || []), ...(y || [])],
+    default: () => []
+  }),
+
+  dockerSandboxActive: Annotation<boolean>({
+    reducer: (_, y) => y,
+    default: () => false
+  }),
+
+  structuredFailures: Annotation<Array<any>>({
+    reducer: (x, y) => [...(x || []), ...(y || [])],
+    default: () => []
+  }),
+
+  planApprovalStatus: Annotation<'NONE' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'FEEDBACK_SUBMITTED'>({
+    reducer: (_, y) => y,
+    default: () => 'NONE'
+  }),
+
+  originalUserRequest: Annotation<string | undefined>({
+    reducer: (_, y) => y,
+    default: () => undefined
+  }),
+
+  errorsEncountered: Annotation<number>({
+    reducer: (x, y) => (y !== undefined ? (x || 0) + y : (x || 0)),
+    default: () => 0
+  })
+});
+
+export type KaizenStateType = typeof KaizenState.State;
+```
+
+### PlanStep Interface Field Breakdown
+- `id: number` (required)
+- `description: string` (required)
+- `status: 'pending' | 'in_progress' | 'completed' | 'failed'` (required)
+- `targetFile?: string` (optional)
+- `language?: string` (optional)
+- `action?: string` (optional)
+- `isNewFile?: boolean` (optional)
+- `dependencies?: string[]` (optional)
+- `requiresApproval?: boolean` (optional)
+- `appliedPatch?: boolean` (optional)
+- `userApprovedFile?: boolean` (optional)
+- `patchId?: string` (optional)
+- `planVersion?: number` (optional)
+
+### Reducers for Specifically Requested Fields
+- **`targetFiles`**:
+  - `default: () => []`
+  - `reducer: (x, y) => Array.from(new Set([...x, ...y]))` (accumulates unique paths)
+- **`plan`**:
+  - `default: () => []`
+  - `reducer`:
+    ```typescript
+    (x, y) => {
+      if (!x.length) return y;
+      if (y.length && y[0].planVersion !== undefined && y[0].planVersion !== x[0]?.planVersion) return y;
+      const merged = [...x];
+      for (const updatedStep of y) {
+        const idx = merged.findIndex(s => s.id === updatedStep.id);
+        if (idx !== -1) merged[idx] = { ...merged[idx], ...updatedStep };
+        else merged.push(updatedStep);
+      }
+      return merged;
+    }
+    ```
+- **`rejectedPlans`**:
+  - `default: () => []`
+  - `reducer: (_, y) => y` (overwrites)
+- **`planAttempt`**:
+  - `default: () => 0`
+  - `reducer: (_, y) => y` (overwrites)
+- **`status`**:
+  - `default: () => "INITIALIZED"`
+  - `reducer: (_, y) => y` (overwrites)
+- **`filePatches`**:
+  - **NOT FOUND** in `src/state.ts` (not defined in `KaizenState`).
+- **`generatedPatch`**:
+  - `default: () => ""`
+  - `reducer: (_, y) => y` (overwrites)
+- **`extractedContext`**:
+  - `default: () => ""`
+  - `reducer: (_, y) => y` (overwrites)
+- **`retryCount`**:
+  - `default: () => 0`
+  - `reducer: (x, y) => y !== undefined ? y : x` (replaces if defined)
+
+---
+
+## 2. tools/llmRunner.ts: FULL CONTENTS
+
+File path: [src/tools/llmRunner.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/llmRunner.ts) (Lines 1–102)
+
+```typescript
+import { z } from 'zod';
+import { ChatGroq } from '@langchain/groq';
+import { langfuseTracer } from './langfuseTracer';
+
+export interface RunStructuredOptions<S extends z.ZodTypeAny> {
+  agent: string;
+  schema: S;
+  system: string;
+  user: string;
+  temperature?: number;
+  timeoutMs?: number; // default 30000
+  models?: string[];
+  validate?: (r: z.infer<S>) => string | null;
+}
+
+export async function runStructured<S extends z.ZodTypeAny>(
+  opts: RunStructuredOptions<S>
+): Promise<{ result: z.infer<S>; model: string }> {
+  const apiKey = process.env.GROQ_API_KEY;
+  const timeoutMs = opts.timeoutMs ?? 30000;
+  
+  let modelList: string[] = [];
+  if (opts.models && opts.models.length > 0) {
+    modelList = opts.models;
+  } else if (process.env.GROQ_MODELS) {
+    modelList = process.env.GROQ_MODELS.split(',').map(m => m.trim()).filter(Boolean);
+  } else {
+    modelList = ['openai/gpt-oss-120b', 'llama-3.3-70b-versatile'];
+  }
+
+  if (!apiKey) {
+    throw new Error('GROQ_API_KEY environment variable is missing or empty.');
+  }
+
+  const errors: string[] = [];
+
+  for (const model of modelList) {
+    let timerHandle: NodeJS.Timeout | null = null;
+    const startTime = Date.now();
+    try {
+      const chatModel = new ChatGroq({
+        apiKey,
+        model,
+        temperature: opts.temperature
+      });
+
+      const runnable = chatModel.withStructuredOutput(opts.schema, { method: 'jsonMode' });
+
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timerHandle = setTimeout(() => {
+          reject(new Error(`Model '${model}' timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      });
+
+      const invokePromise = runnable.invoke([
+        { role: 'system', content: opts.system },
+        { role: 'user', content: opts.user }
+      ]);
+
+      const rawResult = await Promise.race([invokePromise, timeoutPromise]);
+      const latencyMs = Date.now() - startTime;
+
+      if (!rawResult) {
+        throw new Error(`Model '${model}' returned empty result`);
+      }
+
+      const result = rawResult as z.infer<S>;
+
+      if (opts.validate) {
+        const validationError = opts.validate(result);
+        if (validationError) {
+          throw new Error(`Validation failed for model '${model}': ${validationError}`);
+        }
+      }
+
+      // Estimate tokens based on 4 characters per token (approximate estimate)
+      const approxInputTokens = Math.ceil((opts.system.length + opts.user.length) / 4);
+      const approxOutputTokens = Math.ceil(JSON.stringify(result).length / 4);
+
+      await langfuseTracer.recordGeneration(
+        opts.agent,
+        model,
+        opts.user,
+        JSON.stringify(result),
+        latencyMs,
+        approxInputTokens,
+        approxOutputTokens
+      );
+
+      return { result, model };
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      errors.push(`[${model}]: ${errMsg}`);
+    } finally {
+      if (timerHandle) {
+        clearTimeout(timerHandle);
+      }
+    }
+  }
+
+  throw new Error(errors.join(' | '));
+}
+```
+
+### Exact signature of `runStructured`
+[src/tools/llmRunner.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/llmRunner.ts#L16-L18):
+```typescript
+export async function runStructured<S extends z.ZodTypeAny>(
+  opts: RunStructuredOptions<S>
+): Promise<{ result: z.infer<S>; model: string }>
+```
+
+### What happens when `validate` returns a string
+- Line 70–73: If `opts.validate(result)` returns a string `validationError`, it executes:
+  `throw new Error(\`Validation failed for model '${model}': ${validationError}\`);`
+- In line 91–93, the error is caught by `catch (err: any)` and appended to `errors`:
+  `errors.push(\`[${model}]: ${errMsg}\`);`
+- **Is it retried?**: It is **not** retried on the same model. The `for (const model of modelList)` loop advances to the next model in `modelList`.
+- **How many times?**: Exactly once per model in `modelList` (total attempts equal `modelList.length`).
+- **Is the string fed back to the model?**: **No**. The original `opts.user` and `opts.system` prompts are passed identically to the next model without feedback.
+
+### Errors thrown and when
+1. `new Error('GROQ_API_KEY environment variable is missing or empty.')` (Line 32): Thrown before any model call if `process.env.GROQ_API_KEY` is undefined or empty.
+2. `new Error(\`Model '${model}' timed out after ${timeoutMs}ms\`)` (Line 51): Thrown if the model call exceeds `timeoutMs` (defaults to 30000ms).
+3. `new Error(\`Model '${model}' returned empty result\`)` (Line 64): Thrown if `rawResult` is falsy.
+4. `new Error(\`Validation failed for model '${model}': ${validationError}\`)` (Line 72): Thrown when `opts.validate` returns a non-null string.
+5. Schema parse errors: Thrown by `runnable.invoke` (`ChatGroq.withStructuredOutput`) if the response does not parse into `opts.schema`.
+6. `new Error(errors.join(' | '))` (Line 101): Thrown when all models in `modelList` have failed.
+
+### Model / provider used and where configured
+- Provider: Groq (`ChatGroq` from `@langchain/groq`, lines 2, 41–45).
+- API Key: `process.env.GROQ_API_KEY` (Line 19).
+- Models configured at lines 22–29:
+  - If `opts.models` is provided and non-empty, uses `opts.models`.
+  - Else if `process.env.GROQ_MODELS` is set, splits by comma: `process.env.GROQ_MODELS.split(',').map(m => m.trim()).filter(Boolean)`.
+  - Else defaults to: `['openai/gpt-oss-120b', 'llama-3.3-70b-versatile']`.
+
+---
+
+## 3. tools/languageResolver.ts: FULL CONTENTS
+
+File path: [src/tools/languageResolver.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/languageResolver.ts) (Lines 1–149)
+
+```typescript
+import * as path from 'path';
+import * as fs from 'fs';
+
+export interface LanguageResolutionResult {
+  requestedLanguage: string; // 'python', 'typescript', 'javascript', 'html', 'css', 'java', 'cpp', 'c', 'rust', 'go', 'json'
+  source: 'explicit_user_request' | 'target_file_extension' | 'existing_file' | 'project_default';
+  confidence: 'high' | 'medium' | 'low';
+  recommendedExtension: string; // '.py', '.ts', '.js', '.html', '.css', '.java', '.cpp', '.c', '.rs', '.go', '.json'
+}
+
+/**
+ * Reusable Language Resolver
+ * Priority:
+ * 1. Explicit user-requested language in prompt (e.g., "in Python", "using python", "Python program", "in TypeScript")
+ * 2. Explicit target file extension (e.g., "add.py" -> python)
+ * 3. Existing file language when modifying an existing file
+ * 4. Project convention only when language is unspecified
+ * 5. Never silently default to TypeScript if another language was requested
+ */
+export function resolveLanguage(prompt: string, targetFiles: string[] = []): LanguageResolutionResult {
+  const promptLower = (prompt || '').toLowerCase();
+
+  // Priority 1: Explicit user-requested language in prompt
+  if (/\b(python|py|pytest)\b/i.test(promptLower)) {
+    return { requestedLanguage: 'python', source: 'explicit_user_request', confidence: 'high', recommendedExtension: '.py' };
+  }
+  if (/\b(typescript|ts|tsx)\b/i.test(promptLower)) {
+    return { requestedLanguage: 'typescript', source: 'explicit_user_request', confidence: 'high', recommendedExtension: '.ts' };
+  }
+  if (/\b(javascript|js|jsx|node)\b/i.test(promptLower)) {
+    return { requestedLanguage: 'javascript', source: 'explicit_user_request', confidence: 'high', recommendedExtension: '.js' };
+  }
+  if (/\b(html|webpage|landing\s+page|website|html5)\b/i.test(promptLower)) {
+    return { requestedLanguage: 'html', source: 'explicit_user_request', confidence: 'high', recommendedExtension: '.html' };
+  }
+  if (/\b(css|css3|styling|styles)\b/i.test(promptLower)) {
+    return { requestedLanguage: 'css', source: 'explicit_user_request', confidence: 'high', recommendedExtension: '.css' };
+  }
+  if (/\b(java)\b/i.test(promptLower) && !/\bjavascript\b/i.test(promptLower)) {
+    return { requestedLanguage: 'java', source: 'explicit_user_request', confidence: 'high', recommendedExtension: '.java' };
+  }
+  if (/\b(c\+\+|cpp|cplusplus)\b/i.test(promptLower)) {
+    return { requestedLanguage: 'cpp', source: 'explicit_user_request', confidence: 'high', recommendedExtension: '.cpp' };
+  }
+  if (/\b(c)\b/i.test(promptLower) && !/\b(c\+\+|cpp|csharp|css)\b/i.test(promptLower) && /\b(in c|c program|c function|c code)\b/i.test(promptLower)) {
+    return { requestedLanguage: 'c', source: 'explicit_user_request', confidence: 'high', recommendedExtension: '.c' };
+  }
+  if (/\b(rust|rs)\b/i.test(promptLower)) {
+    return { requestedLanguage: 'rust', source: 'explicit_user_request', confidence: 'high', recommendedExtension: '.rs' };
+  }
+  if (/\b(golang|go)\b/i.test(promptLower)) {
+    return { requestedLanguage: 'go', source: 'explicit_user_request', confidence: 'high', recommendedExtension: '.go' };
+  }
+  if (/\b(json)\b/i.test(promptLower)) {
+    return { requestedLanguage: 'json', source: 'explicit_user_request', confidence: 'high', recommendedExtension: '.json' };
+  }
+
+  // Priority 2 & 3: Target File Extension / Existing File
+  if (targetFiles && targetFiles.length > 0) {
+    const ext = targetFiles[0].split('.').pop()?.toLowerCase();
+    switch (ext) {
+      case 'py': return { requestedLanguage: 'python', source: 'target_file_extension', confidence: 'high', recommendedExtension: '.py' };
+      case 'ts':
+      case 'tsx': return { requestedLanguage: 'typescript', source: 'target_file_extension', confidence: 'high', recommendedExtension: '.ts' };
+      case 'js':
+      case 'jsx': return { requestedLanguage: 'javascript', source: 'target_file_extension', confidence: 'high', recommendedExtension: '.js' };
+      case 'html': return { requestedLanguage: 'html', source: 'target_file_extension', confidence: 'high', recommendedExtension: '.html' };
+      case 'css': return { requestedLanguage: 'css', source: 'target_file_extension', confidence: 'high', recommendedExtension: '.css' };
+      case 'java': return { requestedLanguage: 'java', source: 'target_file_extension', confidence: 'high', recommendedExtension: '.java' };
+      case 'cpp':
+      case 'cc': return { requestedLanguage: 'cpp', source: 'target_file_extension', confidence: 'high', recommendedExtension: '.cpp' };
+      case 'c': return { requestedLanguage: 'c', source: 'target_file_extension', confidence: 'high', recommendedExtension: '.c' };
+      case 'rs': return { requestedLanguage: 'rust', source: 'target_file_extension', confidence: 'high', recommendedExtension: '.rs' };
+      case 'go': return { requestedLanguage: 'go', source: 'target_file_extension', confidence: 'high', recommendedExtension: '.go' };
+      case 'json': return { requestedLanguage: 'json', source: 'target_file_extension', confidence: 'high', recommendedExtension: '.json' };
+    }
+  }
+
+  // Priority 4 & 5: Project Default Fallback (TypeScript) when language is completely unspecified
+  return { requestedLanguage: 'typescript', source: 'project_default', confidence: 'low', recommendedExtension: '.ts' };
+}
+
+/**
+ * Derives a target filename from the user prompt and language resolution without hardcoding main.ts
+ * Reuses existing sandbox files or canonical main.<ext> instead of slugifying arbitrary user prompt text.
+ */
+export function deriveTargetFile(prompt: string, resolvedLang: LanguageResolutionResult): string {
+  const ext = resolvedLang.recommendedExtension || '.ts';
+
+  if (resolvedLang.requestedLanguage === 'html') return 'src/sandbox/index.html';
+  if (resolvedLang.requestedLanguage === 'css') return 'src/sandbox/style.css';
+
+  const canonicalPath = `src/sandbox/main${ext}`;
+  const sandboxDir = path.resolve(process.cwd(), 'src/sandbox');
+
+  if (fs.existsSync(sandboxDir)) {
+    // 1. If main.<ext> already exists in src/sandbox/, reuse it!
+    const canonicalAbs = path.resolve(process.cwd(), canonicalPath);
+    if (fs.existsSync(canonicalAbs)) {
+      return canonicalPath;
+    }
+    // 2. If any existing implementation file matching <ext> exists in src/sandbox/, reuse it!
+    try {
+      const existingFiles = fs.readdirSync(sandboxDir).filter(f => f.endsWith(ext) && !f.startsWith('test_') && !f.includes('_test.') && !f.includes('.test.'));
+      if (existingFiles.length > 0) {
+        return `src/sandbox/${existingFiles[0]}`;
+      }
+    } catch { }
+  }
+
+  // 3. Fall back to canonical main.<ext>
+  return canonicalPath;
+}
+
+/**
+ * Validates pre-patch source code syntax to catch syntax errors BEFORE applying patches or running code.
+ */
+export function validateCodeSyntax(code: string, language: string, filePath: string): { isValid: boolean; error?: string } {
+  if (!code || typeof code !== 'string') {
+    return { isValid: false, error: 'Empty or non-string code content' };
+  }
+
+  // Check for multiline single-quoted string syntax error: console.log('\n...')
+  const unterminatedSingleQuoteMatch = code.match(/console\.log\(\s*'\s*[\r\n]+/);
+  if (unterminatedSingleQuoteMatch) {
+    return { isValid: false, error: "Syntax Error: Unterminated multiline single-quote string literal detected in console.log call. Use '\\n' or template literals ``." };
+  }
+
+  if (language === 'python' || filePath.endsWith('.py')) {
+    // Python target must NOT contain TypeScript wrappers or Node.js imports
+    if (code.includes("import * as fs from 'fs'") || code.includes("require('fs')") || code.includes("fs.writeFileSync")) {
+      return { isValid: false, error: 'Language Violation: TypeScript node/fs wrapper code found inside Python target file. Target must contain pure Python code.' };
+    }
+    if (code.includes('export function taskHandler') || code.includes('export function executeTask')) {
+      return { isValid: false, error: 'Boilerplate Violation: Generic TypeScript taskHandler boilerplate found inside Python target file.' };
+    }
+  }
+
+  if (language === 'json' || filePath.endsWith('.json')) {
+    try {
+      JSON.parse(code);
+    } catch (e: any) {
+      return { isValid: false, error: `JSON Parse Error: ${e?.message || e}` };
+    }
+  }
+
+  return { isValid: true };
+}
+```
+
+### Analysis of `validateCodeSyntax` (Lines 118–149)
+- **Universal checks (all files)**:
+  - Empty or non-string: `if (!code || typeof code !== 'string')`
+  - Regex check: `code.match(/console\.log\(\s*'\s*[\r\n]+/)` (detects multiline single-quoted strings in `console.log`).
+- **Python (`language === 'python' || filePath.endsWith('.py')`)**:
+  - Substring checks via `code.includes(...)` for Node/TS keywords: `"import * as fs from 'fs'"`, `"require('fs')"`, `"fs.writeFileSync"`, `'export function taskHandler'`, `'export function executeTask'`.
+  - **Type of validation**: String search / regex only (no real Python parser).
+- **JSON (`language === 'json' || filePath.endsWith('.json')`)**:
+  - `JSON.parse(code)`.
+  - **Type of validation**: Real parser (`JSON.parse`).
+- **Extensions that fall through with NO syntax validation**:
+  - All other file extensions: `.ts`, `.tsx`, `.js`, `.jsx`, `.mjs`, `.cjs`, `.html`, `.css`, `.java`, `.cpp`, `.cc`, `.h`, `.hpp`, `.c`, `.rs`, `.go`, etc. reach line 147 `return { isValid: true };` with zero language syntax verification.
+
+---
+
+## 4. tools/astParser.ts
+
+Signatures and types from [src/tools/astParser.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/astParser.ts):
+
+### `ExtractedSymbol` and `ExtractedSymbolParameter` types in full
+[src/tools/astParser.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/astParser.ts#L3-L28):
+```typescript
+export interface ExtractedSymbolParameter {
+  name: string;
+  type?: string;
+  isInferred?: boolean;
+}
+
+export interface ExtractedSymbol {
+  type: string;
+  name: string;
+  text: string;
+  language?: string;
+  startLine?: number;
+  endLine?: number;
+  startColumn?: number;
+  endColumn?: number;
+  signature?: string;
+  parameters?: ExtractedSymbolParameter[];
+  returnType?: string;
+  returnTypeInferred?: boolean;
+  documentation?: string;
+  loc?: number;
+  complexity?: number;
+  branches?: number;
+  parameterCount?: number;
+  bodyText?: string;
+}
+```
+
+### Signatures of `ASTParserTool`, `getLanguageFromPath`, and `extractTopLevelSymbols`
+In `src/tools/astParser.ts`:
+```typescript
+export class ASTParserTool {
+  private parser: any = null;
+  private currentLanguage: string = 'typescript';
+
+  public getLanguageFromPath(filePath: string): string;
+
+  async init(wasmPath?: string, languageWasmPath?: string, language: string = 'typescript'): Promise<void>;
+
+  public extractTopLevelSymbols(sourceCode: string, languageHint: string = 'typescript'): ExtractedSymbol[];
+
+  private regexFallbackExtract(sourceCode: string, language: string): ExtractedSymbol[];
+}
+```
+
+*(Note: There are no standalone functions for `getLanguageFromPath` or `extractTopLevelSymbols` in `src/tools/astParser.ts`; they are methods on `ASTParserTool`. A standalone `getLanguageFromPath(filePath: string): string` is also exported separately in [src/agents/codeGenAgent.ts:L12](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L12)).*
+
+---
+
+## 5. Graph wiring (src/graph/*)
+
+### Directory Status:
+**NOT FOUND**. Directory `src/graph` does not exist in the repository.
+
+There are no LangGraph compiled `StateGraph` files in this project. The agents are wired imperatively in:
+- [src/index.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts) (`executeAgentPipeline`, lines 28–380)
+- [src/server.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts) (`executePipeline`, lines 525–1560)
+- [src/webviewProvider.ts](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts) (`executePipeline`, lines 170–1005)
+
+### Imperative Node Execution & Conditional Status Routing Table
+
+| Node Name | Function Run | Outgoing Conditional Route / Edge | Status Routed On | Destination |
+| :--- | :--- | :--- | :--- | :--- |
+| **IntentAgent** | `intentAgentNode(state)` | `state.status === "ROUTED_MCP_GIT"` | `ROUTED_MCP_GIT` | `mcpInterface.executeGitAction` -> End |
+| | | `state.status === "ROUTED_MCP_TERMINAL"` | `ROUTED_MCP_TERMINAL` | `mcpInterface.executeTerminalCommand` -> End |
+| | | `state.status === "ROUTED_MEMORY_WRITE"` | `ROUTED_MEMORY_WRITE` | `memoryEngine.consolidator` -> End |
+| | | `state.status === "ROUTED_MEMORY_READ"` | `ROUTED_MEMORY_READ` | `memoryEngine.longTermMemory` -> End |
+| | | `state.status === "ROUTED_EXPLAIN_CODE"` | `ROUTED_EXPLAIN_CODE` | `contextRetrievalAgentNode` -> `responseFilterAgent` -> End |
+| | | `state.status === "ROUTED_GENERATE_CODE" \|\| "ROUTED_REFACTOR"` | `ROUTED_GENERATE_CODE`, `ROUTED_REFACTOR` | `contextRetrievalAgentNode` -> `plannerAgentNode` |
+| | | `state.status === "ROUTED_DEBUG_ERROR"` | `ROUTED_DEBUG_ERROR` | `debuggerAgentNode` -> Disk write -> End |
+| **ContextRetrievalAgent** | `contextRetrievalAgentNode(state)` | Sequential fallthrough based on previous intent status | Unconditional | Next stage according to intent |
+| **PlannerAgent** | `plannerAgentNode(state)` | `plannerOutput.status === 'PLAN_FAILED' \|\| 'PLAN_RETRY_LIMIT'` | `PLAN_FAILED`, `PLAN_RETRY_LIMIT` | Emits failed event, sets `state.planFailureReason`, terminates pipeline |
+| | | `plannerOutput.status === 'PLANNED'` | `PLANNED` | Advances to HITL plan approval (`PENDING_APPROVAL`) |
+| | | `plannerOutput.status === 'SECURITY_VIOLATION_BLOCKED'` | `SECURITY_VIOLATION_BLOCKED` | **NO ROUTE** *(server.ts / index.ts do not check this status; it falls through into HITL approval)* |
+| **Human-In-The-Loop** | HITL Promise (Resolve) | `action === 'reject'` | User rejection | If retries <= 3: re-runs `plannerAgentNode`; else aborts |
+| | | `action === 'feedback'` | User feedback | Re-runs `plannerAgentNode`, then advances to `codeGenAgentNode` |
+| | | `action === 'approve'` | User approval | Sets `planApprovalStatus = 'APPROVED'`, routes to `codeGenAgentNode` |
+| **CodeGenAgent** | `codeGenAgentNode(state)` | `coderOutput.status === 'CODE_GEN_FAILED' \|\| 'PREFLIGHT_SECURITY_BLOCKED'` | `CODE_GEN_FAILED`, `PREFLIGHT_SECURITY_BLOCKED` | Emits failed event, sets `state.generationFailureReason`, terminates pipeline |
+| | | `coderOutput.status === 'CODE_GENERATED'` | `CODE_GENERATED` | Writes patches to disk, executes `runWorkspaceTests` (server) or `reviewerAgentNode` (index.ts) |
+
+---
+
+## 6. Consumers of agent output
+
+Every occurrence reading or writing the requested fields across `src/`:
+
+### `generatedPatch`
+- [src/state.ts:91](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/state.ts#L91): `generatedPatch: Annotation<string>({`
+- [src/index.ts:51](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L51): `generatedPatch: "",`
+- [src/index.ts:253](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L253): `} else if (output.generatedPatch && state.targetFiles[0]) {`
+- [src/index.ts:261](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L261): `fs.writeFileSync(targetFile, output.generatedPatch, 'utf-8');`
+- [src/server.ts:545](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L545): `generatedPatch: "",`
+- [src/webviewProvider.ts:196](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L196): `generatedPatch: "",`
+- [src/agents/codeGenAgent.ts:370](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L370): `const generatedPatch = filePatches.length === 1`
+- [src/agents/codeGenAgent.ts:376](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L376): `generatedPatch,`
+- [src/context/memory/stateMemory.ts:10](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/context/memory/stateMemory.ts#L10): `if (state.generatedPatch) {`
+- [src/context/memory/stateMemory.ts:11](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/context/memory/stateMemory.ts#L11): `generatedObj['patch'] = state.generatedPatch;`
+- [src/tools/memoryTestRunner.ts:465](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L465): `generatedPatch: "",`
+- [src/tools/memoryTestRunner.ts:577](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L577): `generatedPatch: "",`
+- [src/tools/memoryTestRunner.ts:633](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L633): `generatedPatch: "",`
+
+### `filePatches`
+- [src/index.ts:236](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L236): `if (output.filePatches && output.filePatches.length > 0) {`
+- [src/index.ts:237](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L237): `for (const patch of output.filePatches) {`
+- [src/index.ts:360](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L360): `if (debugResult.filePatches && debugResult.filePatches.length > 0) {`
+- [src/index.ts:361](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L361): `for (const patch of debugResult.filePatches) {`
+- [src/server.ts:896](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L896): `filePatches: [],`
+- [src/server.ts:1210](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1210): `logDiagnostic('GRAPH', 'EXIT DebuggerAgent', { rootCause: debugResult.rootCause, patches: debugResult.filePatches.length });`
+- [src/server.ts:1218](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1218): `const validPatches = (debugResult.filePatches || []).filter(p => !isTestFile(p.filePath));`
+- [src/server.ts:1226](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1226): `result: { filePatches: validPatches, diffCards: await prepareDiffCards(validPatches) }`
+- [src/server.ts:1458](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1458): `const diffCards = await prepareDiffCards(coderOutput.filePatches || []);`
+- [src/server.ts:1461](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1461): `if (coderOutput.filePatches && coderOutput.filePatches.length > 0) {`
+- [src/server.ts:1462](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1462): `saveFilePatchesToServerDiskWithVerification(coderOutput.filePatches, emitSSE);`
+- [src/server.ts:1468](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1468): `result: { filePatches: coderOutput.filePatches, diffCards }`
+- [src/server.ts:1496](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1496): `if (debugResult.filePatches && debugResult.filePatches.length > 0) {`
+- [src/server.ts:1497](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1497): `saveFilePatchesToServerDisk(debugResult.filePatches);`
+- [src/server.ts:1548](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1548): `filePatches: coderOutput.filePatches,`
+- [src/server.ts:1549](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1549): `diffCards: await prepareDiffCards(coderOutput.filePatches || []),`
+- [src/server.ts:1562](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1562): `async function prepareDiffCards(filePatches: GeneratedFilePatch[]) {`
+- [src/server.ts:1564](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1564): `for (const patch of filePatches) {`
+- [src/webviewProvider.ts:503](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L503): `filePatches: [],`
+- [src/webviewProvider.ts:597](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L597): `filePatches: [],`
+- [src/webviewProvider.ts:643](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L643): `filePatches: [],`
+- [src/webviewProvider.ts:738](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L738): `const validPatches = (debugResult.filePatches || []).filter(p => !isTestFile(p.filePath));`
+- [src/webviewProvider.ts:748](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L748): `result: { filePatches: validPatches, diffCards: await this.prepareDiffCards(validPatches) }`
+- [src/webviewProvider.ts:908](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L908): `const diffCards = await this.prepareDiffCards(coderOutput.filePatches || []);`
+- [src/webviewProvider.ts:912](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L912): `result: { filePatches: coderOutput.filePatches, diffCards }`
+- [src/webviewProvider.ts:956](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L956): `if (debugResult.filePatches && debugResult.filePatches.length > 0) {`
+- [src/webviewProvider.ts:957](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L957): `for (const patch of debugResult.filePatches) {`
+- [src/webviewProvider.ts:988](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L988): `if (coderOutput.filePatches && coderOutput.filePatches.length > 0) {`
+- [src/webviewProvider.ts:989](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L989): `for (const patch of coderOutput.filePatches) {`
+- [src/webviewProvider.ts:995](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L995): `filePatches: coderOutput.filePatches,`
+- [src/webviewProvider.ts:996](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L996): `diffCards: await this.prepareDiffCards(coderOutput.filePatches || []),`
+- [src/webviewProvider.ts:1007](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L1007): `private async prepareDiffCards(filePatches: GeneratedFilePatch[]) {`
+- [src/webviewProvider.ts:1012](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L1012): `for (const patch of filePatches) {`
+- [src/agents/codeGenAgent.ts:336](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L336): `const filePatches: GeneratedFilePatch[] = finalResult.files.map(f => {`
+- [src/agents/codeGenAgent.ts:346](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L346): `const writeResult = saveFilePatchesToServerDiskWithVerification(filePatches);`
+- [src/agents/codeGenAgent.ts:375](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L375): `filePatches,`
+- [src/agents/debuggerAgent.ts:26](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/debuggerAgent.ts#L26): `filePatches: Array<{ filePath: string; code: string; imports?: string[] }>;`
+- [src/agents/debuggerAgent.ts:192](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/debuggerAgent.ts#L192): `const filePatches = rawFiles`
+- [src/agents/debuggerAgent.ts:206](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/debuggerAgent.ts#L206): `if (filePatches.length > 0) {`
+- [src/agents/debuggerAgent.ts:218](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/debuggerAgent.ts#L218): `filePatches,`
+- [src/agents/debuggerAgent.ts:258](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/debuggerAgent.ts#L258): `filePatches: fallbackPatches,`
+- [src/tools/persistenceEngine.ts:17](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/persistenceEngine.ts#L17): `filePatches?: { filePath: string; code: string }[];`
+
+### `planApprovalStatus`
+- [src/state.ts:202](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/state.ts#L202): `planApprovalStatus: Annotation<'NONE' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'FEEDBACK_SUBMITTED'>({`
+- [src/index.ts:47](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L47): `planApprovalStatus: 'NONE',`
+- [src/server.ts:541](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L541): `planApprovalStatus: 'NONE',`
+- [src/server.ts:1315](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1315): `state.planApprovalStatus = 'PENDING_APPROVAL';`
+- [src/server.ts:1322](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1322): `result: { plan: state.plan, status: state.status, planApprovalStatus: 'PENDING_APPROVAL' }`
+- [src/server.ts:1332](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1332): `planApprovalStatus: 'PENDING_APPROVAL'`
+- [src/server.ts:1342](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1342): `state.planApprovalStatus = 'REJECTED';`
+- [src/server.ts:1379](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1379): `planApprovalStatus: 'PENDING_APPROVAL'`
+- [src/server.ts:1388](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1388): `state.planApprovalStatus = 'REJECTED';`
+- [src/server.ts:1390](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1390): `await finalizeExecution('ABORTED', { message: 'Plan rejected by user max retries reached.', planApprovalStatus: 'REJECTED' });`
+- [src/server.ts:1396](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1396): `state.planApprovalStatus = 'FEEDBACK_SUBMITTED';`
+- [src/server.ts:1430](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1430): `state.planApprovalStatus = 'APPROVED';`
+- [src/webviewProvider.ts:192](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L192): `planApprovalStatus: 'NONE',`
+- [src/webviewProvider.ts:835](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L835): `state.planApprovalStatus = 'PENDING_APPROVAL';`
+- [src/webviewProvider.ts:844](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L844): `planApprovalStatus: 'PENDING_APPROVAL'`
+- [src/webviewProvider.ts:852](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L852): `state.planApprovalStatus = 'REJECTED';`
+- [src/webviewProvider.ts:854](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L854): `await finalizeExecution('ABORTED', { message: 'Plan rejected by user.', planApprovalStatus: 'REJECTED' });`
+- [src/webviewProvider.ts:859](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L859): `state.planApprovalStatus = 'FEEDBACK_SUBMITTED';`
+- [src/webviewProvider.ts:886](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L886): `state.planApprovalStatus = 'APPROVED';`
+- [src/agents/plannerAgent.ts:154](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L154): `(state.planApprovalStatus === 'REJECTED' || state.planApprovalStatus === 'FEEDBACK_SUBMITTED') &&`
+- [src/context/memory/stateMemory.ts:27](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/context/memory/stateMemory.ts#L27): `planApprovalStatus: state.planApprovalStatus || 'NONE',`
+- [src/context/memory/stateMemory.ts:79](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/context/memory/stateMemory.ts#L79): `Plan Approval: ${s.planApprovalStatus}`
+- [src/context/memory/memoryTypes.ts:52](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/context/memory/memoryTypes.ts#L52): `planApprovalStatus: string;`
+- [src/tools/memoryTestRunner.ts:461](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L461): `planApprovalStatus: 'NONE',`
+- [src/tools/memoryTestRunner.ts:573](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L573): `planApprovalStatus: 'NONE',`
+- [src/tools/memoryTestRunner.ts:629](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L629): `planApprovalStatus: 'NONE',`
+
+### `rejectionReason`
+- [src/state.ts:122](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/state.ts#L122): `rejectionReason: Annotation<string | undefined>({`
+- [src/index.ts:72](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L72): `rejectionReason: undefined,`
+- [src/server.ts:566](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L566): `rejectionReason: undefined,`
+- [src/server.ts:1343](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1343): `state.rejectionReason = userHitlResponse.message || undefined;`
+- [src/server.ts:1355](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1355): `if (updatedPlannerOutput.rejectionReason !== undefined) state.rejectionReason = updatedPlannerOutput.rejectionReason as string | undefined;`
+- [src/server.ts:1397](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1397): `state.rejectionReason = userHitlResponse.message;`
+- [src/server.ts:1403](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1403): `if (updatedPlannerOutput.rejectionReason !== undefined) state.rejectionReason = updatedPlannerOutput.rejectionReason as string | undefined;`
+- [src/webviewProvider.ts:217](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L217): `rejectionReason: undefined,`
+- [src/agents/plannerAgent.ts:240](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L240): `if (state.rejectionReason) {`
+- [src/agents/plannerAgent.ts:241](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L241): `userPromptParts.push(\`USER REJECTION FEEDBACK:\\n${state.rejectionReason}\`);`
+- [src/agents/plannerAgent.ts:324](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L324): `rejectionReason: undefined,`
+- [src/tools/memoryTestRunner.ts:486](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L486): `rejectionReason: undefined,`
+- [src/tools/memoryTestRunner.ts:598](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L598): `rejectionReason: undefined,`
+- [src/tools/memoryTestRunner.ts:654](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L654): `rejectionReason: undefined,`
+
+### `rejectedPlans`
+- [src/state.ts:29](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/state.ts#L29): `rejectedPlans: Annotation<string[]>({`
+- [src/index.ts:49](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L49): `rejectedPlans: [],`
+- [src/server.ts:543](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L543): `rejectedPlans: [],`
+- [src/server.ts:1298](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1298): `if (plannerOutput.rejectedPlans !== undefined) state.rejectedPlans = plannerOutput.rejectedPlans;`
+- [src/server.ts:1354](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1354): `if (updatedPlannerOutput.rejectedPlans !== undefined) state.rejectedPlans = updatedPlannerOutput.rejectedPlans;`
+- [src/server.ts:1402](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1402): `if (updatedPlannerOutput.rejectedPlans !== undefined) state.rejectedPlans = updatedPlannerOutput.rejectedPlans;`
+- [src/webviewProvider.ts:194](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L194): `rejectedPlans: [],`
+- [src/webviewProvider.ts:813](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L813): `if (plannerOutput.rejectedPlans !== undefined) state.rejectedPlans = plannerOutput.rejectedPlans;`
+- [src/webviewProvider.ts:864](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L864): `if (updatedPlannerOutput.rejectedPlans !== undefined) state.rejectedPlans = updatedPlannerOutput.rejectedPlans;`
+- [src/agents/plannerAgent.ts:152](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L152): `const rejectedPlans: string[] = [...(state.rejectedPlans || [])];`
+- [src/agents/plannerAgent.ts:159](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L159): `if (lastSummary && !rejectedPlans.includes(lastSummary)) {`
+- [src/agents/plannerAgent.ts:160](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L160): `rejectedPlans.push(lastSummary);`
+- [src/agents/plannerAgent.ts:168](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L168): `rejectedPlans`
+- [src/agents/plannerAgent.ts:236](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L236): `if (rejectedPlans.length > 0) {`
+- [src/agents/plannerAgent.ts:237](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L237): `userPromptParts.push(\`PREVIOUSLY REJECTED PLANS (do NOT repeat these approaches or file structures):\\n${rejectedPlans.map((p, i) => \`Rejected Plan #${i + 1}: ${p}\`).join('\\n')}\`);`
+- [src/agents/plannerAgent.ts:275](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L275): `for (const rejectedPlan of rejectedPlans) {`
+- [src/agents/plannerAgent.ts:323](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L323): `rejectedPlans,`
+- [src/agents/plannerAgent.ts:332](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L332): `rejectedPlans`
+- [src/tools/memoryTestRunner.ts:463](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L463): `rejectedPlans: [],`
+- [src/tools/memoryTestRunner.ts:575](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L575): `rejectedPlans: [],`
+- [src/tools/memoryTestRunner.ts:631](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L631): `rejectedPlans: [],`
+
+### `generationFailureReason`
+- [src/state.ts:61](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/state.ts#L61): `generationFailureReason: Annotation<string | undefined>({`
+- [src/index.ts:76](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L76): `generationFailureReason: undefined`
+- [src/index.ts:228](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L228): `console.error(\`Code Generation Failed: ${coderOutput.generationFailureReason}\`);`
+- [src/server.ts:570](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L570): `generationFailureReason: undefined`
+- [src/server.ts:1440](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1440): `state.generationFailureReason = coderOutput.generationFailureReason;`
+- [src/server.ts:1444](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1444): `message: coderOutput.generationFailureReason || 'Code generation failed.'`
+- [src/server.ts:1448](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1448): `message: coderOutput.generationFailureReason || 'Code generation failed.',`
+- [src/webviewProvider.ts:221](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L221): `generationFailureReason: undefined`
+- [src/webviewProvider.ts:894](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L894): `state.generationFailureReason = coderOutput.generationFailureReason;`
+- [src/webviewProvider.ts:898](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L898): `message: coderOutput.generationFailureReason || 'Code generation failed.'`
+- [src/webviewProvider.ts:901](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L901): `await finalizeExecution('FAILED', { message: coderOutput.generationFailureReason || 'Code generation failed.' });`
+- [src/agents/codeGenAgent.ts:189](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L189): `generationFailureReason: 'The approved plan has no target files.'`
+- [src/agents/codeGenAgent.ts:197](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L197): `generationFailureReason: \`Protected file access blocked: ${tf}\``
+- [src/agents/codeGenAgent.ts:332](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L332): `generationFailureReason: lastError || 'Code generation failed after 2 passes.'`
+- [src/agents/codeGenAgent.ts:351](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L351): `generationFailureReason: \`Failed to write or verify files on disk: ${writeResult.failedFiles.join(', ')}\``
+- [src/tools/memoryTestRunner.ts:490](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L490): `generationFailureReason: undefined`
+- [src/tools/memoryTestRunner.ts:602](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L602): `generationFailureReason: undefined`
+- [src/tools/memoryTestRunner.ts:658](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L658): `generationFailureReason: undefined`
+
+### `planFailureReason`
+- [src/state.ts:34](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/state.ts#L34): `planFailureReason: Annotation<string | undefined>({`
+- [src/index.ts:50](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L50): `planFailureReason: undefined,`
+- [src/index.ts:171](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L171): `console.error(\`Plan Generation Failed: ${plannerOutput.planFailureReason}\`);`
+- [src/index.ts:206](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L206): `console.error(\`Plan Generation Failed: ${updatedPlannerOutput.planFailureReason}\`);`
+- [src/server.ts:544](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L544): `planFailureReason: undefined,`
+- [src/server.ts:1301](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1301): `state.planFailureReason = plannerOutput.planFailureReason;`
+- [src/server.ts:1305](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1305): `message: plannerOutput.planFailureReason || 'Plan generation failed.'`
+- [src/server.ts:1309](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1309): `message: plannerOutput.planFailureReason || 'Plan generation failed.',`
+- [src/server.ts:1359](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1359): `state.planFailureReason = updatedPlannerOutput.planFailureReason;`
+- [src/server.ts:1363](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1363): `message: updatedPlannerOutput.planFailureReason || 'Plan generation failed.'`
+- [src/server.ts:1367](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1367): `message: updatedPlannerOutput.planFailureReason || 'Plan generation failed.',`
+- [src/server.ts:1407](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1407): `state.planFailureReason = updatedPlannerOutput.planFailureReason;`
+- [src/server.ts:1411](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1411): `message: updatedPlannerOutput.planFailureReason || 'Plan generation failed.'`
+- [src/server.ts:1415](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1415): `message: updatedPlannerOutput.planFailureReason || 'Plan generation failed.',`
+- [src/webviewProvider.ts:195](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L195): `planFailureReason: undefined,`
+- [src/webviewProvider.ts:816](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L816): `state.planFailureReason = plannerOutput.planFailureReason;`
+- [src/webviewProvider.ts:820](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L820): `message: plannerOutput.planFailureReason || 'Plan generation failed.'`
+- [src/webviewProvider.ts:823](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L823): `await finalizeExecution('FAILED', { message: plannerOutput.planFailureReason || 'Plan generation failed.' });`
+- [src/webviewProvider.ts:868](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L868): `state.planFailureReason = updatedPlannerOutput.planFailureReason;`
+- [src/webviewProvider.ts:872](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L872): `message: updatedPlannerOutput.planFailureReason || 'Plan generation failed.'`
+- [src/webviewProvider.ts:875](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L875): `await finalizeExecution('FAILED', { message: updatedPlannerOutput.planFailureReason || 'Plan generation failed.' });`
+- [src/agents/plannerAgent.ts:167](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L167): `planFailureReason: 'Plan rejected 3 times. Please refine the request.',`
+- [src/agents/plannerAgent.ts:331](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L331): `planFailureReason: failureReason,`
+- [src/tools/memoryTestRunner.ts:464](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L464): `planFailureReason: undefined,`
+- [src/tools/memoryTestRunner.ts:576](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L576): `planFailureReason: undefined,`
+- [src/tools/memoryTestRunner.ts:632](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/memoryTestRunner.ts#L632): `planFailureReason: undefined,`
+
+### `plan` (Core State Reads/Writes)
+- [src/state.ts:76](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/state.ts#L76): `plan: Annotation<PlanStep[]>({`
+- [src/index.ts:46](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L46): `plan: [],`
+- [src/index.ts:181](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L181): `plan: plannerOutput.plan || [],`
+- [src/index.ts:213](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L213): `state.plan = updatedPlannerOutput.plan || state.plan;`
+- [src/server.ts:590](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L590): `plan: state.plan,`
+- [src/server.ts:1295](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1295): `state.plan = plannerOutput.plan || [];`
+- [src/server.ts:1330](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1330): `plan: state.plan,`
+- [src/server.ts:1352](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1352): `state.plan = updatedPlannerOutput.plan || state.plan;`
+- [src/server.ts:1377](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1377): `plan: state.plan,`
+- [src/server.ts:1400](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1400): `state.plan = updatedPlannerOutput.plan || state.plan;`
+- [src/webviewProvider.ts:810](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L810): `state.plan = plannerOutput.plan || [];`
+- [src/webviewProvider.ts:842](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L842): `plan: state.plan,`
+- [src/webviewProvider.ts:862](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L862): `state.plan = updatedPlannerOutput.plan || state.plan;`
+- [src/agents/plannerAgent.ts:155](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L155): `state.plan && state.plan.length > 0`
+- [src/agents/plannerAgent.ts:321](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L321): `plan: planSteps,`
+- [src/agents/codeGenAgent.ts:166](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L166): `const planSteps = [...(state.plan || [])].sort((a, b) => a.id - b.id);`
+- [src/agents/codeGenAgent.ts:379](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L379): `plan: updatedPlan,`
+
+### `targetFiles` (Core State Reads/Writes)
+- [src/state.ts:66](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/state.ts#L66): `targetFiles: Annotation<string[]>({`
+- [src/index.ts:44](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L44): `targetFiles: [],`
+- [src/index.ts:90](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L90): `targetFiles: intentOutput.targetFiles`
+- [src/index.ts:150](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L150): `targetFiles: retrievalOutput.targetFiles`
+- [src/server.ts:665](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L665): `state.targetFiles = intentOutput.targetFiles;`
+- [src/server.ts:1027](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1027): `state.targetFiles = retrievalOutput.targetFiles;`
+- [src/server.ts:1474](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1474): `let testResult = await runWorkspaceTests(state.targetFiles);`
+- [src/server.ts:1483](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1483): `state.targetFiles = Array.from(new Set([...state.targetFiles, ...discoveredFiles]));`
+- [src/webviewProvider.ts:265](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L265): `state.targetFiles = intentOutput.targetFiles;`
+- [src/webviewProvider.ts:653](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L653): `state.targetFiles = retrievalOutput.targetFiles;`
+- [src/webviewProvider.ts:917](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/webviewProvider.ts#L917): `let testResult = await runWorkspaceTests(state.targetFiles);`
+- [src/agents/plannerAgent.ts:148](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L148): `const stateTargets = state.targetFiles || [];`
+- [src/agents/plannerAgent.ts:322](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L322): `targetFiles: uniqueTargetFiles,`
+- [src/agents/codeGenAgent.ts:178](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/codeGenAgent.ts#L178): `(state.targetFiles || []).forEach(f => {`
+
+---
+
+## 7. Downstream nodes
+
+Nodes running after `codeGenAgentNode`:
+
+### 1. File Persistence & Diff Cards
+- **In [src/server.ts:1458–1470](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1458-L1470)**:
+```typescript
+      const diffCards = await prepareDiffCards(coderOutput.filePatches || []);
+
+      // Auto-persist verified patches to disk so tests can validate them
+      if (coderOutput.filePatches && coderOutput.filePatches.length > 0) {
+        saveFilePatchesToServerDiskWithVerification(coderOutput.filePatches, emitSSE);
+      }
+
+      emitSSE('agent_step', {
+        agent: 'CoderAgent',
+        status: 'completed',
+        result: { filePatches: coderOutput.filePatches, diffCards }
+      });
+```
+- **Expects**: **Multiple** (`filePatches: GeneratedFilePatch[]`).
+
+- **In [src/index.ts:235–270](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L235-L270)**:
+```typescript
+    function saveFilePatches(output: typeof coderOutput) {
+      if (output.filePatches && output.filePatches.length > 0) {
+        for (const patch of output.filePatches) {
+          if (!isProtectedFile(patch.filePath)) {
+            try {
+              const dir = path.dirname(patch.filePath);
+              if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+              }
+              fs.writeFileSync(patch.filePath, patch.code, 'utf-8');
+              console.log(`\nSuccess! Saved code changes to: ${patch.filePath}`);
+            } catch (err) {
+              console.error(`Failed to write file ${patch.filePath}:`, err);
+            }
+          } else {
+            console.warn(`Skipped writing to protected file: ${patch.filePath}`);
+          }
+        }
+      } else if (output.generatedPatch && state.targetFiles[0]) {
+        const targetFile = state.targetFiles[0];
+        if (!isProtectedFile(targetFile)) {
+          try {
+            const dir = path.dirname(targetFile);
+            if (!fs.existsSync(dir)) {
+              fs.mkdirSync(dir, { recursive: true });
+            }
+            fs.writeFileSync(targetFile, output.generatedPatch, 'utf-8');
+            console.log(`\nSuccess! Saved code changes to: ${targetFile}`);
+          } catch (err) {
+            console.error(`Failed to write file ${targetFile}:`, err);
+          }
+        }
+      }
+    }
+
+    saveFilePatches(coderOutput);
+```
+- **Expects**: Checks `filePatches` first (multiple); falls back to `generatedPatch` and `state.targetFiles[0]` (single).
+
+### 2. Test Runner (`runWorkspaceTests`)
+- **Location**: [src/tools/testRunner.ts:40](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/tools/testRunner.ts#L40)
+- **Invocation**: `let testResult = await runWorkspaceTests(state.targetFiles);` ([src/server.ts:1474](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1474))
+- **Input**: `targetFiles: string[] = []`
+- **Return Statement**: Returns `Promise<TestExecutionResult>` (`{ passed: boolean; summary: string; ... }`).
+- **Patch format**: Neither `generatedPatch` nor `filePatches`. Runs commands directly against files on disk.
+
+### 3. Debugger Agent (`debuggerAgentNode`)
+- **Location**: [src/agents/debuggerAgent.ts:28](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/debuggerAgent.ts#L28)
+- **Input handling**: `state: typeof KaizenState.State` (reads `state.targetFiles` and `state.extractedContext`).
+- **Return statement**:
+```typescript
+    return {
+      rootCause: result.rootCause || result.root_cause || result.root_cause_analysis || "Bug resolved.",
+      fixExplanation: result.fixExplanation || result.fix_explanation || result.explanation || "Applied bug fix patch.",
+      filePatches,
+      status: 'BUG_FIXED'
+    };
+```
+- **Patch format**: Outputs **multiple** (`filePatches: Array<{ filePath: string; code: string; imports?: string[] }>`).
+
+### 4. Reviewer Agent (`reviewerAgentNode`)
+- **Location**: [src/agents/reviewerAgent.ts:28](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/reviewerAgent.ts#L28)
+- **Input handling**:
+[src/agents/reviewerAgent.ts:73–77](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/reviewerAgent.ts#L73-L77):
+```typescript
+        const userPrompt = `User Request: "${state.userInput}"
+Target Files: ${targetFiles.join(', ')}
+
+=== GENERATED CODE PATCH / CONTEXT ===
+${state.extractedContext || "No generated context available"}`;
+```
+- **Return statement**:
+[src/agents/reviewerAgent.ts:123–130](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/reviewerAgent.ts#L123-L130):
+```typescript
+        return {
+          approved,
+          codeQualityScore,
+          issues,
+          suggestions,
+          summary,
+          status: approved ? "REVIEW_PASSED" : "REVIEW_FAILED"
+        };
+```
+- **Patch format**: Does not read `generatedPatch` or `filePatches` directly; reads `state.extractedContext`.
+
+### 5. Memory Engine (`stateMemory`)
+- **Location**: [src/context/memory/stateMemory.ts:10–11](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/context/memory/stateMemory.ts#L10-L11):
+```typescript
+    if (state.generatedPatch) {
+      generatedObj['patch'] = state.generatedPatch;
+    }
+```
+- **Expects**: **Single patch** (`state.generatedPatch`).
+
+---
+
+## 8. Human approval / plan approval flow
+
+Code setting `planApprovalStatus` and `rejectionReason` in [src/server.ts:1315–1432](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1315-L1432):
+
+```typescript
+      state.planApprovalStatus = 'PENDING_APPROVAL';
+      completedStages.push('planner');
+      persistenceEngine.saveCheckpoint(sessionId, 'PlanApproval_Pending', state);
+
+      emitSSE('agent_step', {
+        agent: 'PlannerAgent',
+        status: 'completed',
+        result: { plan: state.plan, status: state.status, planApprovalStatus: 'PENDING_APPROVAL' }
+      });
+
+      // 4. Human-In-The-Loop (HITL) Plan Approval Request Widget
+      emitSSE('hitl_request', {
+        type: 'PLAN_APPROVAL',
+        title: 'Plan Approval Required',
+        message: 'Please review the generated implementation plan before proceeding to code generation.',
+        plan: state.plan,
+        targetFiles: state.targetFiles,
+        planApprovalStatus: 'PENDING_APPROVAL'
+      });
+
+      let userHitlResponse = await new Promise<{ action: 'approve' | 'reject' | 'feedback'; message?: string }>((resolve) => {
+        registerHitl(sessionId, resolve);
+      });
+
+      emitSSE('hitl_received', { response: userHitlResponse });
+
+      while (userHitlResponse.action === 'reject') {
+        state.planApprovalStatus = 'REJECTED';
+        state.rejectionReason = userHitlResponse.message || undefined;
+        state.retryCount = (state.retryCount || 0) + 1;
+        if (state.retryCount <= 3) {
+          emitSSE('agent_step', {
+            agent: 'PlannerAgent',
+            status: 'running',
+            message: `[Attempt #${state.retryCount}] User rejected plan. Re-planning alternative approach...`
+          });
+          const updatedPlannerOutput = await plannerAgentNode(state);
+          state.plan = updatedPlannerOutput.plan || state.plan;
+          if (updatedPlannerOutput.planAttempt !== undefined) state.planAttempt = updatedPlannerOutput.planAttempt;
+          if (updatedPlannerOutput.rejectedPlans !== undefined) state.rejectedPlans = updatedPlannerOutput.rejectedPlans;
+          if (updatedPlannerOutput.rejectionReason !== undefined) state.rejectionReason = updatedPlannerOutput.rejectionReason as string | undefined;
+
+          if (updatedPlannerOutput.status === 'PLAN_FAILED' || updatedPlannerOutput.status === 'PLAN_RETRY_LIMIT') {
+            state.status = updatedPlannerOutput.status;
+            state.planFailureReason = updatedPlannerOutput.planFailureReason;
+            emitSSE('agent_step', {
+              agent: 'PlannerAgent',
+              status: 'failed',
+              message: updatedPlannerOutput.planFailureReason || 'Plan generation failed.'
+            });
+            skippedStages.push('coder', 'testrunner', 'debugger', 'reviewer');
+            await finalizeExecution('FAILED', {
+              message: updatedPlannerOutput.planFailureReason || 'Plan generation failed.',
+              status: updatedPlannerOutput.status
+            });
+            return;
+          }
+
+          emitSSE('hitl_request', {
+            type: 'PLAN_APPROVAL',
+            title: 'Plan Approval Required',
+            message: 'Please review the generated implementation plan before proceeding to code generation.',
+            plan: state.plan,
+            targetFiles: state.targetFiles,
+            planApprovalStatus: 'PENDING_APPROVAL'
+          });
+
+          userHitlResponse = await new Promise<{ action: 'approve' | 'reject' | 'feedback'; message?: string }>((resolve) => {
+            registerHitl(sessionId, resolve);
+          });
+
+          emitSSE('hitl_received', { response: userHitlResponse });
+        } else {
+          state.planApprovalStatus = 'REJECTED';
+          skippedStages.push('coder', 'testrunner', 'debugger', 'reviewer');
+          await finalizeExecution('ABORTED', { message: 'Plan rejected by user max retries reached.', planApprovalStatus: 'REJECTED' });
+          return;
+        }
+      }
+
+      if (userHitlResponse.action === 'feedback' && userHitlResponse.message) {
+        state.planApprovalStatus = 'FEEDBACK_SUBMITTED';
+        state.rejectionReason = userHitlResponse.message;
+        emitSSE('agent_step', { agent: 'PlannerAgent', status: 'running', message: 'Updating plan with user feedback...' });
+        const updatedPlannerOutput = await plannerAgentNode(state);
+        state.plan = updatedPlannerOutput.plan || state.plan;
+        if (updatedPlannerOutput.planAttempt !== undefined) state.planAttempt = updatedPlannerOutput.planAttempt;
+        if (updatedPlannerOutput.rejectedPlans !== undefined) state.rejectedPlans = updatedPlannerOutput.rejectedPlans;
+        if (updatedPlannerOutput.rejectionReason !== undefined) state.rejectionReason = updatedPlannerOutput.rejectionReason as string | undefined;
+
+        if (updatedPlannerOutput.status === 'PLAN_FAILED' || updatedPlannerOutput.status === 'PLAN_RETRY_LIMIT') {
+          state.status = updatedPlannerOutput.status;
+          state.planFailureReason = updatedPlannerOutput.planFailureReason;
+          emitSSE('agent_step', {
+            agent: 'PlannerAgent',
+            status: 'failed',
+            message: updatedPlannerOutput.planFailureReason || 'Plan generation failed.'
+          });
+          skippedStages.push('coder', 'testrunner', 'debugger', 'reviewer');
+          await finalizeExecution('FAILED', {
+            message: updatedPlannerOutput.planFailureReason || 'Plan generation failed.',
+            status: updatedPlannerOutput.status
+          });
+          return;
+        }
+
+        persistenceEngine.saveCheckpoint(sessionId, 'PlannerAgent_Feedback', state);
+
+        emitSSE('agent_step', {
+          agent: 'PlannerAgent',
+          status: 'completed',
+          result: { plan: state.plan, status: state.status }
+        });
+      }
+
+      state.planApprovalStatus = 'APPROVED';
+      persistenceEngine.saveCheckpoint(sessionId, 'PlanApproval_Approved', state);
+```
+
+### Exact String Values Used
+- `planApprovalStatus`:
+  - `'NONE'` (initial default in `state.ts:205`, `server.ts:541`, `webviewProvider.ts:192`)
+  - `'PENDING_APPROVAL'` (`server.ts:1315`, `webviewProvider.ts:835`)
+  - `'REJECTED'` (`server.ts:1342`, `server.ts:1388`, `webviewProvider.ts:852`)
+  - `'FEEDBACK_SUBMITTED'` (`server.ts:1396`, `webviewProvider.ts:859`)
+  - `'APPROVED'` (`server.ts:1430`, `webviewProvider.ts:886`)
+- `rejectionReason`:
+  - `undefined` (initial default in `state.ts:124`, `server.ts:566`)
+  - String value from `userHitlResponse.message` (`server.ts:1343`, `server.ts:1397`)
+  - Reset to `undefined` on successful replanning in [src/agents/plannerAgent.ts:324](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/agents/plannerAgent.ts#L324).
+
+---
+
+## 9. Imports and circular dependencies
+
+### Import statements at top of every file in `src/agents/`
+
+1. **`src/agents/codeGenAgent.ts`**:
+```typescript
+import { z } from 'zod';
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
+import { KaizenState } from '../state';
+import { normalizeSandboxPath } from './plannerAgent';
+import { validateCodeSyntax } from '../tools/languageResolver';
+import { runStructured } from '../tools/llmRunner';
+```
+
+2. **`src/agents/plannerAgent.ts`**:
+```typescript
+import { z } from 'zod';
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
+import { KaizenState, PlanStep } from '../state';
+import { ASTParserTool, ExtractedSymbol } from '../tools/astParser';
+import { isProtectedFile } from './codeGenAgent';
+import { runStructured } from '../tools/llmRunner';
+```
+
+3. **`src/agents/contextRetrievalAgent.ts`**:
+```typescript
+import * as path from 'path';
+import * as fs from 'fs';
+import { KaizenState } from '../state';
+import { GraphifyEngine } from '../tools/graphifyEngine';
+import { persistenceEngine } from '../tools/persistenceEngine';
+```
+
+4. **`src/agents/contextSufficiencyAgent.ts`**:
+```typescript
+import { ChatGroq } from '@langchain/groq';
+import * as dotenv from 'dotenv';
+import { KaizenStateType } from '../state';
+```
+
+5. **`src/agents/debuggerAgent.ts`**:
+```typescript
+import { z } from 'zod';
+import { ChatGroq } from '@langchain/groq';
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
+import { KaizenState } from '../state';
+import { langfuseTracer } from '../tools/langfuseTracer';
+import { FilePatchSchema, isProtectedFile, getLanguageFromPath, sanitizeCodePatch } from './codeGenAgent';
+```
+
+6. **`src/agents/intentAgent.ts`**:
+```typescript
+import { z } from 'zod';
+import { ChatGroq } from '@langchain/groq';
+import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+import * as path from 'path';
+import { KaizenState } from '../state';
+import { langfuseTracer } from '../tools/langfuseTracer';
+```
+
+7. **`src/agents/responseFilterAgent.ts`**:
+```typescript
+import { ChatGroq } from '@langchain/groq';
+```
+
+8. **`src/agents/reviewerAgent.ts`**:
+```typescript
+import { z } from 'zod';
+import { ChatGroq } from '@langchain/groq';
+import * as dotenv from 'dotenv';
+import { KaizenState } from '../state';
+import { langfuseTracer } from '../tools/langfuseTracer';
+```
+
+---
+
+### Import statements at top of every file in `src/tools/`
+
+1. **`src/tools/astParser.ts`**:
+```typescript
+import * as Parser from 'web-tree-sitter';
+```
+
+2. **`src/tools/browserSnapshotParser.ts`**:
+*(No imports at top; pure TypeScript interfaces/classes)*
+
+3. **`src/tools/debug-validator.ts`**:
+```typescript
+import { existsSync, readFileSync } from 'fs';
+import { resolve } from 'path';
+```
+
+4. **`src/tools/dockerSandbox.ts`**:
+```typescript
+import { exec } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
+```
+
+5. **`src/tools/graphifyEngine.ts`**:
+```typescript
+import * as fs from 'fs';
+import * as path from 'path';
+import { ASTParserTool, ExtractedSymbol, ExtractedSymbolParameter } from './astParser';
+```
+
+6. **`src/tools/langfuseTracer.ts`**:
+```typescript
+import { Langfuse } from 'langfuse';
+import { BaseCallbackHandler } from '@langchain/core/callbacks/base';
+import * as dotenv from 'dotenv';
+```
+
+7. **`src/tools/languageResolver.ts`**:
+```typescript
+import * as path from 'path';
+import * as fs from 'fs';
+```
+
+8. **`src/tools/llmRunner.ts`**:
+```typescript
+import { z } from 'zod';
+import { ChatGroq } from '@langchain/groq';
+import { langfuseTracer } from './langfuseTracer';
+```
+
+9. **`src/tools/memoryTestRunner.ts`**:
+```typescript
+import { memoryEngine } from '../context/memory/memoryEngine';
+import { contextManager } from '../context/contextManager';
+import { sanitizeSecretInfo } from '../context/memory/memoryTypes';
+import { persistenceEngine } from './persistenceEngine';
+import { KaizenStateType } from '../state';
+import { runWorkspaceTests } from './testRunner';
+import * as fs from 'fs';
+import * as path from 'path';
+```
+
+10. **`src/tools/ocrService.ts`**:
+```typescript
+import { ChatGroq } from '@langchain/groq';
+import { HumanMessage } from '@langchain/core/messages';
+import * as dotenv from 'dotenv';
+```
+
+11. **`src/tools/permissionGate.ts`**:
+*(No imports at top; pure TypeScript types/classes)*
+
+12. **`src/tools/persistenceEngine.ts`**:
+```typescript
+import * as fs from 'fs';
+import * as path from 'path';
+import { KaizenStateType, PlanStep } from '../state';
+import { conversationalMemory } from '../memory/conversationalMemory';
+import { projectMemory } from '../memory/projectMemory';
+import { workflowMemory } from '../memory/workflowMemory';
+import { structuralMemory } from '../memory/structuralMemory';
+```
+
+13. **`src/tools/testRunner.ts`**:
+```typescript
+import { exec } from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
+import { validateBeforeSubmission, FileMetadata } from './universalValidator';
+import { dockerSandbox } from './dockerSandbox';
+```
+
+14. **`src/tools/universalValidator.ts`**:
+```typescript
+import * as fs from 'fs';
+import * as path from 'path';
+import { exec } from 'child_process';
+```
+
+15. **`src/tools/webSearchTool.ts`**:
+```typescript
+import * as dotenv from 'dotenv';
+```
+
+---
+
+### Circular Import Analysis: `plannerAgent.ts` <-> `codeGenAgent.ts`
+- **Is it a circular import?**: **Yes**.
+  - `src/agents/plannerAgent.ts` imports `isProtectedFile` from `./codeGenAgent` (Line 7).
+  - `src/agents/codeGenAgent.ts` imports `normalizeSandboxPath` from `./plannerAgent` (Line 6).
+- **Is anything broken by it?**:
+  - **No execution failure detected in code**. Neither `isProtectedFile` nor `normalizeSandboxPath` is invoked during module initialization/top-level execution (they are called inside exported functions `plannerAgentNode`, `codeGenAgentNode`, `saveFilePatchesToServerDiskWithVerification`, etc.).
+  - `npx tsc --noEmit` produces 0 errors and no output.
+
+---
+
+## 10. Config
+
+### package.json (dependencies and scripts only)
+File path: [package.json](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/package.json) (Lines 44–72)
+
+```json
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start": "tsc && node dist/index.js",
+    "server": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.2.9",
+    "@langchain/groq": "^1.3.1",
+    "@langchain/langgraph": "^1.4.13",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@playwright/mcp": "^0.0.82",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "cors": "^2.8.6",
+    "csv-parse": "^7.0.2",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "langfuse": "^3.39.2",
+    "ts-node-dev": "^2.0.0",
+    "web-tree-sitter": "^0.26.13",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.138.0",
+    "typescript": "^5.0.0"
+  }
+```
+
+### tsconfig.json (FULL CONTENTS)
+File path: [tsconfig.json](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/tsconfig.json) (Lines 1–16)
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["src/**/*"],
+  "exclude": ["src/sandbox/**/*"]
+}
+```
+
+### Environment variables read anywhere in `src/` (`process.env.X`)
+- **`GROQ_API_KEY`**:
+  - `src/agents/contextSufficiencyAgent.ts:107`
+  - `src/agents/debuggerAgent.ts:88`
+  - `src/agents/intentAgent.ts:592`
+  - `src/agents/responseFilterAgent.ts:25`
+  - `src/agents/reviewerAgent.ts:30`
+  - `src/server.ts:1068`
+  - `src/server.ts:1814`
+  - `src/tools/llmRunner.ts:19`
+  - `src/tools/ocrService.ts:11`
+  - `src/webviewProvider.ts:514`
+- **`GROQ_MODELS`**:
+  - `src/tools/llmRunner.ts:25`
+  - `src/tools/llmRunner.ts:26`
+- **`GEMINI_API_KEY`**:
+  - `src/tools/webSearchTool.ts:35`
+- **`GOOGLE_GEMINI_API_KEY`**:
+  - `src/tools/webSearchTool.ts:35`
+- **`LANGFUSE_PUBLIC_KEY`**:
+  - `src/tools/langfuseTracer.ts:34`
+- **`LANGFUSE_SECRET_KEY`**:
+  - `src/tools/langfuseTracer.ts:35`
+- **`LANGFUSE_HOST`**:
+  - `src/tools/langfuseTracer.ts:36`
+- **`PORT`**:
+  - `src/server.ts:32`
+
+---
+
+## 11. Compiler output (raw)
+
+tsc produced no output
+
+---
+
+## 12. Sandbox folder
+
+Files inside [src/sandbox/](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/sandbox):
+
+```
+src/sandbox/
+├── index.html
+├── index.js
+├── main.cpp
+├── main.py
+├── main.ts
+├── random_graph.py
+├── script.js
+├── styles.css
+└── styles.js
+```
+
+---
+
+## 13. Things you could not find
+
+1. **`src/graph/*`**:
+   The directory `src/graph` does not exist on disk. There are no compiled LangGraph StateGraphs (`addNode`, `addEdge`, `compile()`) in the repository. The workflow is orchestrated imperatively inside `src/index.ts`, `src/server.ts`, and `src/webviewProvider.ts`.
+2. **`filePatches` in `KaizenState`**:
+   `filePatches` is not defined as an Annotation in `src/state.ts`. It exists only as an ad-hoc property returned by `codeGenAgentNode` and `debuggerAgentNode`.
+3. **Standalone functions for `getLanguageFromPath` and `extractTopLevelSymbols` in `src/tools/astParser.ts`**:
+   In `src/tools/astParser.ts`, they exist solely as class methods on `ASTParserTool` (though `getLanguageFromPath` exists separately as a standalone function in `src/agents/codeGenAgent.ts`).
+4. **Outgoing Route for `SECURITY_VIOLATION_BLOCKED`**:
+   `plannerAgentNode` can return `{ status: 'SECURITY_VIOLATION_BLOCKED' }`, but neither `src/server.ts`, `src/index.ts`, nor `src/webviewProvider.ts` has a conditional check or route for this status. It falls through unchecked into the HITL plan approval prompt.
+
+## 7. Downstream nodes 
+Nodes running after `codeGenAgentNode`: 
+### 1. File Persistence & Diff Cards 
+- **In [src/server.ts:1458–1470](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/server.ts#L1458-L1470)**: 
+```typescript 
+      const diffCards = await prepareDiffCards(coderOutput.filePatches || []); 
+      // Auto-persist verified patches to disk so tests can validate them 
+      if (coderOutput.filePatches && coderOutput.filePatches.length > 0) { 
+        saveFilePatchesToServerDiskWithVerification(coderOutput.filePatches, emitSSE); 
+      } 
+      emitSSE('agent_step', { 
+        agent: 'CoderAgent', 
+        status: 'completed', 
+        result: { filePatches: coderOutput.filePatches, diffCards } 
+      }); 
+``` 
+- **Expects**: **Multiple** (`filePatches: GeneratedFilePatch[]`). 
+- **In [src/index.ts:235–270](file:///c:/Users/ADMIN/OneDrive/Desktop/kaizen_main/src/index.ts#L235-L270)**: 
+```typescript 
+    function saveFilePatches(output: typeof coderOutput) { 
+      if (output.filePatches && output.filePatches.length > 0) { 
+        for (const patch of output.filePatches) { 
+          if (!isProtectedFile(patch.filePath)) { 
+            try { 
+              const dir = path.dirname(patch.filePath); 
+              if (!fs.existsSync(dir)) { 
+                fs.mkdirSync(dir, { recursive: true }); 
+              } 
+              fs.writeFileSync(patch.filePath, patch.code, 'utf-8'); 
+              console.log(`\nSuccess! Saved code changes to: ${patch.filePath}`); 
+            } catch (err) { 
+              console.error(`Failed to write file ${patch.filePath}:`, err); 
+            } 
+          } else { 
+            console.warn(`Skipped writing to protected file: ${patch.filePath}`); 
+          } 
+        } 
+      } else if (output.generatedPatch && state.targetFiles[0]) { 
+        const targetFile = state.targetFiles[0]; 
+        if (!isProtectedFile(targetFile)) { 
+          try { 
+            const dir = path.dirname(targetFile); 
+            if (!fs.existsSync(dir)) { 
+              fs.mkdirSync(dir, { recursive: true }); 
+            } 
+            fs.writeFileSync(targetFile, output.generatedPatch, 'utf-8'); 
+            console.log(`\nSuccess! Saved code changes to: ${targetFile}`); 
+          } catch (err) { 
+            console.error(`Failed to write file ${targetFile}:`, err); 
+          } 
+        } 
+      } 
+    } 
+    saveFilePatches(coderOutput); 
+` Checks `filePatches` first (multiple); falls back to `generatedPatch` and `state.targetFiles[0]` (single). 
+### 2. Test Runner (`runWorkspaceTests`) 
+
+
+THIS IS THE REPORT , pls tell me what to fix

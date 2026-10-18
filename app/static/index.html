@@ -1,119 +1,919 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ContextSwitch Studio — Gemma 2 2B Neural Prompt Engine</title>
-    <link rel="stylesheet" href="/static/style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-</head>
-<body>
-    <header class="navbar">
-        <div class="brand">
-            <span class="logo-icon">⚡</span>
-            <h1>ContextSwitch <span class="tag">Gemma 2 2B Studio</span></h1>
-        </div>
-        <div class="system-status">
-            <span class="pill" id="gemma-status">🧠 Gemma 2 2B: Initializing...</span>
-            <span class="pill" id="sentry-status">📈 Sentry Traced</span>
-        </div>
-    </header>
 
-    <main class="container">
-        <!-- Navigation Tabs -->
-        <nav class="tabs-nav">
-            <button class="tab-btn active" id="tab-btn-compress" onclick="switchTab('compress')">🗜️ Gemma 2 2B Entropy Compressor</button>
-            <button class="tab-btn" id="tab-btn-handoff" onclick="switchTab('handoff')">🔄 Context Handoff</button>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Prompt Compressor</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --paper: #f0eee6;
+            /* warm page background */
+            --card: #faf9f5;
+            /* raised surface */
+            --ink: #141413;
+            /* near-black text */
+            --muted: #6b6a64;
+            --line: #dedacc;
+            --field: #ffffff;
+            --accent: #c6613f;
+            /* warm clay accent */
+            --ok: #3f7a4f;
+            --btn-bg: #141413;
+            --btn-bg-hover: #2c2b28;
+            --btn-fg: #faf9f5;
+            --note-bg: #f6e9e2;
+            --note-fg: #7a3a22;
+            --rw-bg: #fbf1ec;
+            --rw-border: #e9cdc1;
+            --placeholder: #a3a198;
+            --ring: rgba(20, 20, 19, .08);
+            --shadow: rgba(20, 20, 19, .12);
+            --sans: "Helvetica Neue", Helvetica, Arial, "Segoe UI", sans-serif;
+            --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Times New Roman", serif;
+            --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+        }
+
+        :root[data-theme="dark"] {
+            color-scheme: dark;
+            --paper: #161513;
+            --card: #211f1d;
+            --ink: #f0eee6;
+            --muted: #a09e95;
+            --line: #3a3733;
+            --field: #181715;
+            --accent: #e8825f;
+            --ok: #6fbf84;
+            --btn-bg: #f0eee6;
+            --btn-bg-hover: #ffffff;
+            --btn-fg: #141413;
+            --note-bg: #3a2820;
+            --note-fg: #f0c4b2;
+            --rw-bg: #35241d;
+            --rw-border: #5a3a2d;
+            --placeholder: #6f6d66;
+            --ring: rgba(240, 238, 230, .12);
+            --shadow: rgba(0, 0, 0, .5);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+        }
+
+        body {
+            background: var(--paper);
+            color: var(--ink);
+            font-family: var(--serif);
+            line-height: 1.5;
+            padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
+        }
+
+        .wrap {
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 0 28px 64px;
+        }
+
+        /* nav */
+        nav.top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 26px 0;
+            font-family: var(--sans);
+        }
+
+        .brand {
+            font-weight: 700;
+            letter-spacing: .14em;
+            font-size: 15px;
+            text-transform: uppercase;
+        }
+
+        .links {
+            display: flex;
+            align-items: center;
+            gap: 28px;
+            font-size: 15px;
+        }
+
+        .links a {
+            color: var(--ink);
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .links a:hover {
+            text-decoration: underline;
+            text-underline-offset: 4px;
+        }
+
+        .pill {
+            font-size: 12px;
+            color: var(--muted);
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+        }
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #c9a227;
+        }
+
+        .dot.ok {
+            background: var(--ok);
+        }
+
+        /* buttons */
+        .btn {
+            cursor: pointer;
+            border: 1px solid var(--btn-bg);
+            background: var(--btn-bg);
+            color: var(--btn-fg);
+            font-family: var(--sans);
+            font-weight: 600;
+            font-size: 15px;
+            padding: 12px 22px;
+            border-radius: 12px;
+            transition: background .15s, transform .05s;
+        }
+
+        .btn:hover {
+            background: var(--btn-bg-hover);
+        }
+
+        .btn:active {
+            transform: translateY(1px);
+        }
+
+        .btn:disabled {
+            opacity: .65;
+            cursor: progress;
+        }
+
+        .btn.ghost {
+            background: transparent;
+            color: var(--ink);
+            border-color: var(--line);
+            font-weight: 500;
+            font-size: 13px;
+            padding: 7px 13px;
+        }
+
+        .btn.ghost:hover {
+            border-color: var(--ink);
+            background: transparent;
+        }
+
+        body,
+        .tool,
+        textarea,
+        select,
+        input,
+        .stats,
+        .tag,
+        .btn,
+        .tabs,
+        .tab-btn {
+            transition: background-color .2s, color .2s, border-color .2s;
+        }
+
+        .theme-toggle {
+            cursor: pointer;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            border: 1px solid var(--line);
+            background: transparent;
+            color: var(--ink);
+            font-size: 17px;
+            line-height: 1;
+            display: grid;
+            place-items: center;
+        }
+
+        .theme-toggle:hover {
+            border-color: var(--ink);
+        }
+
+        /* hero */
+        .hero {
+            display: grid;
+            grid-template-columns: 1.35fr 1fr;
+            gap: 56px;
+            align-items: end;
+            padding: 70px 0 54px;
+        }
+
+        h1 {
+            margin: 0;
+            font-family: var(--sans);
+            font-weight: 700;
+            font-size: clamp(42px, 6.4vw, 88px);
+            line-height: 1.02;
+            letter-spacing: -.04em;
+        }
+
+        h1 u {
+            text-decoration-thickness: .055em;
+            text-underline-offset: .09em;
+        }
+
+        .lede {
+            font-size: clamp(18px, 2vw, 24px);
+            line-height: 1.35;
+            margin: 0 0 14px;
+        }
+
+        .proof {
+            font-family: var(--sans);
+            font-size: 13px;
+            color: var(--muted);
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 16px;
+        }
+
+        .proof span::before {
+            content: "✓ ";
+            color: var(--ink);
+        }
+
+        /* how it works */
+        .flow {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0;
+            margin: 0 0 44px;
+            border-top: 1px solid var(--ink);
+        }
+
+        .step {
+            padding: 16px 20px 0 0;
+        }
+
+        .step .n {
+            font-family: var(--sans);
+            font-size: 12px;
+            letter-spacing: .1em;
+            color: var(--muted);
+        }
+
+        .step b {
+            display: block;
+            font-family: var(--sans);
+            font-size: 17px;
+            margin: 4px 0 2px;
+            letter-spacing: -.01em;
+        }
+
+        .step small {
+            color: var(--muted);
+            font-size: 15px;
+        }
+
+        /* tool */
+        .tool {
+            background: var(--card);
+            border: 1px solid var(--line);
+            border-radius: 30px;
+            padding: 26px;
+        }
+
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 18px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 6px;
+            background: var(--paper);
+            padding: 4px;
+            border-radius: 12px;
+            font-family: var(--sans);
+        }
+
+        .tab-btn {
+            cursor: pointer;
+            border: 0;
+            background: transparent;
+            color: var(--muted);
+            padding: 8px 16px;
+            border-radius: 9px;
+            font: inherit;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .tab-btn.active {
+            background: var(--card);
+            color: var(--ink);
+            box-shadow: 0 1px 2px var(--shadow);
+        }
+
+        .tab-pane {
+            display: none;
+        }
+
+        .tab-pane.active {
+            display: block;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .pane {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .pane h2 {
+            margin: 0;
+            font-family: var(--sans);
+            font-size: 13px;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        .row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        label {
+            font-family: var(--sans);
+            font-size: 12px;
+            color: var(--muted);
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        select,
+        input[type=text] {
+            background: var(--field);
+            color: var(--ink);
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 9px 11px;
+            font-family: var(--sans);
+            font-size: 14px;
+            min-width: 150px;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 340px;
+            resize: vertical;
+            background: var(--field);
+            color: var(--ink);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 14px;
+            font-family: var(--mono);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        textarea::placeholder {
+            color: var(--placeholder);
+            font-family: var(--serif);
+            font-size: 15px;
+        }
+
+        textarea:focus,
+        select:focus,
+        input:focus {
+            outline: none;
+            border-color: var(--ink);
+            box-shadow: 0 0 0 3px var(--ring);
+        }
+
+        .samples {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: center;
+            font-family: var(--sans);
+        }
+
+        .samples>span {
+            font-size: 12px;
+            color: var(--muted);
+        }
+
+        .sbtn {
+            cursor: pointer;
+            font-family: var(--sans);
+            font-size: 12px;
+            color: var(--ink);
+            background: transparent;
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 5px 12px;
+        }
+
+        .sbtn:hover {
+            border-color: var(--ink);
+        }
+
+        .muted {
+            color: var(--muted);
+            font-family: var(--sans);
+            font-size: 12px;
+        }
+
+        /* results */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: var(--field);
+        }
+
+        .stat {
+            padding: 12px 16px;
+            border-right: 1px solid var(--line);
+        }
+
+        .stat:last-child {
+            border-right: 0;
+        }
+
+        .stat small {
+            font-family: var(--sans);
+            font-size: 11px;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .stat b {
+            display: block;
+            font-family: var(--sans);
+            font-size: 26px;
+            letter-spacing: -.03em;
+        }
+
+        .stat.saved b {
+            color: var(--accent);
+        }
+
+        .bar {
+            height: 4px;
+            background: var(--line);
+            border-radius: 999px;
+            overflow: hidden;
+        }
+
+        .bar>div {
+            height: 100%;
+            width: 0;
+            background: var(--ink);
+            transition: width .5s ease;
+        }
+
+        .tags {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            font-family: var(--sans);
+        }
+
+        .tag {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            color: var(--muted);
+            background: var(--field);
+        }
+
+        .note {
+            display: none;
+            font-family: var(--sans);
+            font-size: 13px;
+            background: var(--note-bg);
+            color: var(--note-fg);
+            border-radius: 12px;
+            padding: 10px 12px;
+        }
+
+        .removed {
+            display: none;
+        }
+
+        .removed .lbl {
+            font-family: var(--sans);
+            font-size: 12px;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .rw {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .rw span {
+            font-family: var(--mono);
+            font-size: 12px;
+            text-decoration: line-through;
+            color: var(--accent);
+            border: 1px solid var(--rw-border);
+            border-radius: 7px;
+            padding: 2px 8px;
+            background: var(--rw-bg);
+        }
+
+        footer {
+            margin-top: 34px;
+            font-family: var(--sans);
+            font-size: 12px;
+            color: var(--muted);
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        @media (max-width: 960px) {
+            .hero {
+                grid-template-columns: 1fr;
+                gap: 24px;
+                padding: 36px 0 32px;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .flow {
+                grid-template-columns: 1fr 1fr;
+                row-gap: 18px;
+            }
+
+            .links a.hide-m {
+                display: none;
+            }
+
+            textarea {
+                min-height: 240px;
+            }
+
+            .tool {
+                padding: 16px;
+                border-radius: 24px;
+            }
+        }
+    </style>
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('pc-theme');
+                if (!t) t = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', t);
+            } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+        })();
+    </script>
+</head>
+
+<body>
+    <div class="wrap">
+        <nav class="top">
+            <div class="brand">Prompt Compressor</div>
+            <div class="links">
+                <span class="pill"><span class="dot" id="health-dot"></span><span
+                        id="health-text">checking…</span></span>
+                <a class="hide-m" onclick="switchTab('handoff'); go()">Context Handoff</a>
+                <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Toggle dark mode"
+                    title="Toggle dark / light" onclick="toggleTheme()">☾</button>
+                <button class="btn" onclick="switchTab('compress'); go()">Try it</button>
+            </div>
         </nav>
 
-        <!-- Tab 1: Prompt Compressor -->
-        <section id="tab-compress" class="tab-pane active">
-            <div class="panel-grid">
-                <div class="card input-card">
-                    <div class="card-header">
-                        <h2>Input Developer Prompt</h2>
-                        <div class="mode-select">
-                            <label for="compress-mode">Mode:</label>
-                            <select id="compress-mode">
-                                <option value="hybrid" selected>🔄 Hybrid (Rules + Gemma API Rewrite)</option>
-                                <option value="rule">📏 Deterministic Rule-Based</option>
-                                <option value="gemma_generative">🧠 Gemma 2 Generative Rewrite</option>
-                            </select>
+        <section class="hero">
+            <h1>Shrink prompts.<br>Keep the <u>meaning</u>.</h1>
+            <div>
+                <p class="lede">Cut filler and wordiness before a prompt reaches the model. Every result is verified,
+                    and you see exactly which words were removed.</p>
+                <div class="proof"><span>Protected tokens verified</span><span>Deletion audit</span><span>Safe
+                        fallback</span><span>3,677 offline tests</span></div>
+            </div>
+        </section>
+
+        <section class="flow">
+            <div class="step">
+                <div class="n">01</div><b>Rules</b><small>Strip filler instantly.</small>
+            </div>
+            <div class="step">
+                <div class="n">02</div><b>AI rewrite</b><small>Gemma or Gemini shortens the prose.</small>
+            </div>
+            <div class="step">
+                <div class="n">03</div><b>Safety gate</b><small>Negations, numbers, quotes and code must
+                    survive.</small>
+            </div>
+            <div class="step">
+                <div class="n">04</div><b>Safe fallback</b><small>Anything doubtful is rejected.</small>
+            </div>
+        </section>
+
+        <section class="tool" id="tool">
+            <div class="toolbar">
+                <div class="tabs">
+                    <button class="tab-btn active" id="tab-btn-compress"
+                        onclick="switchTab('compress')">Compressor</button>
+                    <button class="tab-btn" id="tab-btn-handoff" onclick="switchTab('handoff')">Context Handoff</button>
+                </div>
+            </div>
+
+            <!-- COMPRESSOR -->
+            <div class="tab-pane active" id="tab-compress">
+                <div class="grid">
+                    <div class="pane">
+                        <div class="row">
+                            <h2>Your prompt</h2>
+                            <div class="controls">
+                                <label>Mode
+                                    <select id="compress-mode">
+                                        <option value="hybrid" selected>Hybrid: rules + AI rewrite</option>
+                                        <option value="rule">Rules only (instant)</option>
+                                    </select>
+                                </label>
+                                <label>Intensity
+                                    <select id="drop-rate">
+                                        <option value="0.2">Light</option>
+                                        <option value="0.3">Balanced</option>
+                                        <option value="0.4" selected>Standard</option>
+                                        <option value="0.5">Aggressive</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="samples" id="samples"><span>Try an example</span></div>
+                        <textarea id="compress-input" placeholder="Paste a long, wordy prompt here…"></textarea>
+                        <div class="row">
+                            <span class="muted" id="input-token-count">0 tokens</span>
+                            <button class="btn" id="btn-run-compress" onclick="runCompression()">Compress
+                                prompt</button>
                         </div>
                     </div>
-                    <div class="drop-rate-select">
-                        <label for="drop-rate">Pruning Intensity (Tokens to Drop):</label>
-                        <select id="drop-rate">
-                            <option value="0.20">20% (Conservative)</option>
-                            <option value="0.30">30% (Moderate)</option>
-                            <option value="0.40" selected>40% (Recommended / Standard)</option>
-                            <option value="0.50">50% (Aggressive)</option>
-                        </select>
-                    </div>
-                    <textarea id="compress-input" placeholder="Paste your verbose developer prompt here with code snippets or instructions... (e.g., 'Can you please kindly help me write a function to connect SQLite with pooling? Thank you!')"></textarea>
-                    <div class="action-bar">
-                        <span id="input-token-count" class="token-count">0 tokens</span>
-                        <button id="btn-run-compress" class="primary-btn" onclick="runCompression()">Compress with Gemma 2</button>
+
+                    <div class="pane">
+                        <div class="row">
+                            <h2>Compressed prompt</h2>
+                            <button class="btn ghost" id="btn-copy-compress" onclick="copyCompressed()">Copy</button>
+                        </div>
+                        <textarea id="compress-output" readonly
+                            placeholder="Your compressed prompt appears here."></textarea>
+                        <div class="stats">
+                            <div class="stat"><small>Original</small><b id="stat-orig">0</b></div>
+                            <div class="stat"><small>Compressed</small><b id="stat-comp">0</b></div>
+                            <div class="stat saved"><small>Saved</small><b id="stat-saved">0 (0%)</b></div>
+                        </div>
+                        <div class="bar">
+                            <div id="saved-bar"></div>
+                        </div>
+                        <div class="tags"><span class="tag" id="stat-engine">Engine: ready</span><span class="tag"
+                                id="stat-latency">Latency: –</span></div>
+                        <div class="note" id="note-box"></div>
+                        <div class="removed" id="removed-box">
+                            <div class="lbl">Removed words</div>
+                            <div class="rw" id="removed-words"></div>
+                        </div>
                     </div>
                 </div>
+            </div>
 
-                <div class="card output-card">
-                    <div class="card-header">
-                        <h2>Sparse Compressed Output</h2>
-                        <button class="secondary-btn" id="btn-copy-compress" onclick="copyCompressed()">📋 Copy</button>
+            <!-- HANDOFF -->
+            <div class="tab-pane" id="tab-handoff">
+                <div class="grid">
+                    <div class="pane">
+                        <h2>Conversation or log</h2>
+                        <label>Project name<input type="text" id="project-name-input"
+                                placeholder="Default-Project"></label>
+                        <textarea id="handoff-input"
+                            placeholder="Paste a long chat, bug report or log. We extract decisions, constraints, failed approaches and the next step."></textarea>
+                        <div class="row"><span class="muted">Turns a messy transcript into a clean system prompt for the
+                                next model.</span>
+                            <button class="btn" id="btn-run-handoff" onclick="runHandoff()">Generate handoff</button>
+                        </div>
                     </div>
-                    <textarea id="compress-output" readonly placeholder="Optimized token slice will appear here in sub-milliseconds..."></textarea>
-                    
-                    <div class="engine-badge-bar">
-                        <span class="info-tag" id="stat-engine">Engine: Ready</span>
-                        <span class="info-tag" id="stat-latency">Latency: -- ms</span>
-                    </div>
-
-                    <div class="metrics-bar">
-                        <div class="metric">
-                            <span class="label">Original:</span>
-                            <span id="stat-orig" class="val">0</span>
+                    <div class="pane">
+                        <div class="row">
+                            <h2>Handoff artifact</h2>
+                            <button class="btn ghost" id="btn-copy-handoff" onclick="copyHandoff()">Copy for next
+                                LLM</button>
                         </div>
-                        <div class="metric">
-                            <span class="label">Compressed:</span>
-                            <span id="stat-comp" class="val">0</span>
-                        </div>
-                        <div class="metric highlight">
-                            <span class="label">Tokens Saved:</span>
-                            <span id="stat-saved" class="val">0 (0%)</span>
-                        </div>
+                        <textarea id="handoff-output" readonly
+                            placeholder="Your structured handoff appears here."></textarea>
                     </div>
                 </div>
             </div>
         </section>
 
-        <!-- Tab 2: Context Handoff -->
-        <section id="tab-handoff" class="tab-pane">
-            <div class="panel-grid">
-                <div class="card input-card">
-                    <div class="card-header">
-                        <h2>Developer Conversation / Debug Log</h2>
-                        <input type="text" id="project-name-input" placeholder="Project Name" value="ContextSwitch-Core">
-                    </div>
-                    <textarea id="handoff-input" placeholder="Paste chat log, terminal output, or multi-turn discussion when switching AI models..."></textarea>
-                    <div class="action-bar">
-                        <button id="btn-run-handoff" class="primary-btn" onclick="runHandoff()">Generate Handoff Artifact</button>
-                    </div>
-                </div>
+        <footer><span>Built for Hacktoberfest · FastAPI · Gemma / Gemini</span><span>We would rather save nothing than
+                change your meaning.</span></footer>
+    </div>
 
-                <div class="card output-card">
-                    <div class="card-header">
-                        <h2>Lossless Handoff Artifact (.md)</h2>
-                        <button class="secondary-btn" id="btn-copy-handoff" onclick="copyHandoff()">📋 Copy for Next LLM</button>
-                    </div>
-                    <textarea id="handoff-output" readonly placeholder="Universal System Prompt / Markdown handoff will appear here..."></textarea>
-                </div>
-            </div>
-        </section>
-    </main>
+    <script>
+        const $ = (id) => document.getElementById(id);
+        function currentTheme() { return document.documentElement.getAttribute('data-theme') || 'light'; }
+        function paintThemeIcon() { $('theme-toggle').textContent = currentTheme() === 'dark' ? '☀' : '☾'; }
+        function toggleTheme() {
+            const next = currentTheme() === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', next);
+            try { localStorage.setItem('pc-theme', next); } catch (e) { }
+            paintThemeIcon();
+        }
+        paintThemeIcon();
+        try {   // follow the OS setting until the user picks a theme manually
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+                let saved = null; try { saved = localStorage.getItem('pc-theme'); } catch (x) { }
+                if (!saved) { document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light'); paintThemeIcon(); }
+            });
+        } catch (e) { }
+        function go() { $('tool').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
 
-    <script src="/static/app.js"></script>
+        function switchTab(name) {
+            ['compress', 'handoff'].forEach((n) => {
+                $('tab-' + n).classList.toggle('active', n === name);
+                $('tab-btn-' + n).classList.toggle('active', n === name);
+            });
+        }
+
+        // ---- example prompts (great for demos) ----
+        const SAMPLES = {
+            'Wordy request': `Hello! I would like you to please help me write a Python script. Could you kindly make sure that the script does NOT delete any files, and that it only reads files from the folder "reports". I want you to process at most 50 files at a time. Basically, the script should really just print the total number of lines in each file. Thank you so much, I really appreciate your help!`,
+            'Customer email (<data>)': `As an AI language model, I want you to carefully review the customer email below and please write a polite reply. Do not promise a refund. Do not mention the internal tool JIRA-4521. The reply should be under 120 words and it should be written in a friendly tone. Thanks!
+
+<data>
+Hi team, my order #88213 arrived damaged on 12 March. I paid $249.99 and I would like my money back as soon as possible. Regards, Priya
+</data>`,
+            'Polite email': `Can you please help me with something? I would like you to kindly write a short email to my professor. Could you please make sure it is polite and that it asks for an extension of 2 days on my assignment. I want you to keep it under 100 words. Thank you so much, thanks a lot!`,
+            'Chat slang': `hey can u plz write a script that does NOT delete 3 files and only reads the folder "reports" thx`
+        };
+        (function buildSamples() {
+            const box = $('samples');
+            Object.keys(SAMPLES).forEach((name) => {
+                const b = document.createElement('button');
+                b.className = 'sbtn'; b.type = 'button'; b.textContent = name;
+                b.onclick = () => { $('compress-input').value = SAMPLES[name]; updateCount(); };
+                box.appendChild(b);
+            });
+        })();
+
+        function updateCount() {
+            const t = $('compress-input').value.trim();
+            $('input-token-count').textContent = (t ? Math.max(1, Math.floor(t.length / 4)) : 0) + ' tokens (est.)';
+        }
+        $('compress-input').addEventListener('input', updateCount);
+        $('compress-input').addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') runCompression(); });
+
+        async function checkHealth() {
+            try {
+                const res = await fetch('/api/v1/health');
+                if (!res.ok) throw new Error('bad status');
+                const d = await res.json();
+                $('health-dot').classList.add('ok');
+                $('health-text').textContent = d.gemma_active ? 'AI rewrite ready' : 'Rule engine ready';
+            } catch (e) {
+                $('health-text').textContent = 'Standalone mode';
+            }
+        }
+        checkHealth();
+
+        // ---- compression ----
+        async function postCompress(prompt, mode, dropRate, timeoutMs) {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+            try {
+                const res = await fetch('/api/v1/compress', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: prompt, mode: mode, drop_rate: dropRate }), signal: ctrl.signal
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.detail || 'Error compressing prompt.');
+                return data;
+            } finally { clearTimeout(timer); }
+        }
+
+        function showResult(d, tag) {
+            $('compress-output').value = d.compressed_prompt;
+            $('stat-orig').textContent = d.original_tokens;
+            $('stat-comp').textContent = d.compressed_tokens;
+            $('stat-saved').textContent = d.tokens_saved + ' (' + d.compression_ratio + '%)';
+            $('saved-bar').style.width = Math.min(100, Math.max(0, d.compression_ratio)) + '%';
+            $('stat-engine').textContent = 'Engine: ' + d.engine_used + (tag ? ' · ' + tag : '');
+            $('stat-latency').textContent = 'Latency: ' + (d.latency_ms ? Math.round(d.latency_ms) + ' ms' : '< 1 ms');
+
+            const note = $('note-box');
+            note.style.display = d.note ? 'block' : 'none';
+            note.textContent = d.note || '';
+
+            const rb = $('removed-box'), rw = $('removed-words');
+            rw.textContent = '';
+            const words = d.removed_words || [];
+            words.forEach((w) => { const s = document.createElement('span'); s.textContent = w; rw.appendChild(s); });
+            rb.style.display = words.length ? 'block' : 'none';
+        }
+
+        async function runCompression() {
+            const prompt = $('compress-input').value;
+            const mode = $('compress-mode').value;
+            const dropRate = parseFloat($('drop-rate').value || '0.40');
+            const btn = $('btn-run-compress');
+            if (!prompt.trim()) { alert('Please paste a prompt to compress.'); return; }
+
+            btn.disabled = true;
+            const t0 = Date.now();
+            const tick = setInterval(() => { btn.textContent = 'Compressing… ' + Math.floor((Date.now() - t0) / 1000) + 's'; }, 250);
+            btn.textContent = 'Compressing…';
+            try {
+                const quick = await postCompress(prompt, 'rule', dropRate, 15000);      // instant, no API
+                showResult(quick, mode === 'rule' ? '' : 'instant result');
+                if (mode !== 'rule') {
+                    try {
+                        const ai = await postCompress(prompt, mode, dropRate, 25000);       // AI upgrade
+                        if (ai.compressed_tokens < quick.compressed_tokens) showResult(ai, 'AI upgrade');
+                        else $('stat-engine').textContent = 'Engine: ' + quick.engine_used + ' · no safe AI gain';
+                    } catch (e) {
+                        $('stat-engine').textContent = 'Engine: ' + quick.engine_used + ' · AI step skipped (slow or unavailable)';
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                alert(err.name === 'AbortError' ? 'Request timed out.' : (err.message || 'Failed to connect to the server.'));
+            } finally {
+                clearInterval(tick);
+                btn.disabled = false;
+                btn.textContent = 'Compress prompt';
+            }
+        }
+
+        // ---- handoff ----
+        async function runHandoff() {
+            const raw = $('handoff-input').value;
+            const project = $('project-name-input').value || 'Default-Project';
+            const btn = $('btn-run-handoff');
+            if (!raw.trim()) { alert('Please paste a conversation or log.'); return; }
+            btn.disabled = true; btn.textContent = 'Extracting context…';
+            try {
+                const res = await fetch('/api/v1/handoff', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ project_name: project, raw_transcript: raw })
+                });
+                const d = await res.json();
+                if (res.ok) $('handoff-output').value = d.formatted_markdown;
+                else alert(d.detail || 'Error extracting context.');
+            } catch (e) { console.error(e); alert('Failed to connect to the server.'); }
+            finally { btn.disabled = false; btn.textContent = 'Generate handoff'; }
+        }
+
+        function flash(btnId, done, back) {
+            const b = $(btnId); b.textContent = done; setTimeout(() => { b.textContent = back; }, 1500);
+        }
+        function copyCompressed() {
+            const t = $('compress-output').value;
+            if (t) { navigator.clipboard.writeText(t); flash('btn-copy-compress', 'Copied', 'Copy'); }
+        }
+        function copyHandoff() {
+            const t = $('handoff-output').value;
+            if (t) { navigator.clipboard.writeText(t); flash('btn-copy-handoff', 'Copied', 'Copy for next LLM'); }
+        }
+    </script>
 </body>
+
 </html>

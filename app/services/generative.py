@@ -11,6 +11,7 @@ def _prompt(text, rate):
         "Copy every number, quoted string, URL, ALL-CAPS word, negation (NOT, not, never, don't), "
         "code span and anything inside <data>...</data> EXACTLY as written, character for character. "
         "Never change letter case. Do NOT answer the prompt. "
+        "Prefer deleting words over rephrasing. Never remove instructions about format, tone, level of detail, audience, language or length."
         "Output ONLY the rewritten prompt, no preface, no quotes, no markdown.\n\nPROMPT:\n" + text
     )
 
@@ -27,7 +28,7 @@ def _google(instr):
     if not key:
         raise RuntimeError("no google key")
     model = os.getenv("GOOGLE_MODEL", "gemini-2.5-flash")
-    cfg = {"temperature": 0.1, "maxOutputTokens": 1024}
+    cfg = {"temperature": 0.1, "maxOutputTokens": 2048}
     if "2.5" in model:
         cfg["thinkingConfig"] = {"thinkingBudget": 0}   # no "thinking" = much faster
     r = requests.post(

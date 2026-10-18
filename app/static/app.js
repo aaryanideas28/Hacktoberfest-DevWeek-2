@@ -45,7 +45,47 @@ async function checkHealth() {
 }
 checkHealth();
 
-// Run compression via API
+// ---- helpers ----
+async function postCompress(prompt, mode, dropRate, timeoutMs) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    try {
+        const res = await fetch('/api/v1/compress', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: prompt, mode: mode, drop_rate: dropRate }),
+            signal: ctrl.signal
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Error compressing prompt.");
+        return data;
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+function showResult(data, tag) {
+    document.getElementById('compress-output').value = data.compressed_prompt;
+    document.getElementById('stat-orig').innerText = data.original_tokens;
+    document.getElementById('stat-comp').innerText = data.compressed_tokens;
+    document.getElementById('stat-saved').innerText = `${data.tokens_saved} (${data.compression_ratio}%)`;
+    document.getElementById('stat-engine').innerText = `Engine: ${data.engine_used}${tag ? ' · ' + tag : ''}`;
+    document.getElementById('stat-latency').innerText = `Latency: ${data.latency_ms || '< 1'} ms`;
+
+    let box = document.getElementById('compress-extras');
+    if (!box) {
+        box = document.createElement('div');
+        box.id = 'compress-extras';
+        box.style.cssText = 'margin-top:8px;font-size:12px;opacity:.85;line-height:1.4;white-space:pre-line';
+        document.getElementById('compress-output').insertAdjacentElement('afterend', box);
+    }
+    const parts = [];
+    if (data.note) parts.push('ℹ️ ' + data.note);
+    if (data.removed_words && data.removed_words.length) parts.push('Removed: ' + data.removed_words.join(', '));
+    box.textContent = parts.join('\n');
+}
+
+// Run compression: instant rule result first, then AI upgrade
 async function runCompression() {
     const prompt = document.getElementById('compress-input').value;
     const mode = document.getElementById('compress-mode').value;
@@ -58,37 +98,38 @@ async function runCompression() {
     }
 
     btn.disabled = true;
-    btn.innerText = "Computing Gemma Logits...";
+    const t0 = Date.now();
+    const tick = setInterval(() => {
+        btn.innerText = `Compressing… ${Math.floor((Date.now() - t0) / 1000)}s`;
+    }, 250);
 
     try {
-        const res = await fetch(`/api/v1/compress`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                prompt: prompt,
-                mode: mode,
-                drop_rate: dropRate
-            })
-        });
+        // Phase 1: instant, no API
+        const quick = await postCompress(prompt, 'rule', dropRate, 15000);
+        showResult(quick, mode === 'rule' ? '' : 'instant');
 
-        const data = await res.json();
-        if (res.ok) {
-            document.getElementById('compress-output').value = data.compressed_prompt;
-            document.getElementById('stat-orig').innerText = data.original_tokens;
-            document.getElementById('stat-comp').innerText = data.compressed_tokens;
-            document.getElementById('stat-saved').innerText = `${data.tokens_saved} (${data.compression_ratio}%)`;
-
-            document.getElementById('stat-engine').innerText = `Engine: ${data.engine_used}`;
-            document.getElementById('stat-latency').innerText = `Latency: ${data.latency_ms || '< 1'} ms`;
-        } else {
-            alert(data.detail || "Error compressing prompt.");
+        // Phase 2: AI rewrite (only if an AI mode is selected)
+        if (mode !== 'rule') {
+            try {
+                const ai = await postCompress(prompt, mode, dropRate, 25000);
+                if (ai.compressed_tokens < quick.compressed_tokens) {
+                    showResult(ai, 'AI upgrade');
+                } else {
+                    document.getElementById('stat-engine').innerText =
+                        `Engine: ${quick.engine_used} · no safe AI gain`;
+                }
+            } catch (e) {
+                document.getElementById('stat-engine').innerText =
+                    `Engine: ${quick.engine_used} · AI step skipped (slow or unavailable)`;
+            }
         }
     } catch (err) {
         console.error(err);
-        alert("Failed to connect to backend server.");
+        alert(err.name === 'AbortError' ? "Request timed out." : (err.message || "Failed to connect to backend server."));
     } finally {
+        clearInterval(tick);
         btn.disabled = false;
-        btn.innerText = "Compress with Gemma 2";
+        btn.innerText = "Compress Prompt";
     }
 }
 
