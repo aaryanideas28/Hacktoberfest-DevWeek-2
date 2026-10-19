@@ -275,3 +275,9 @@ The `GET /api/v1/health` endpoint reports whether an LLM provider and Sentry are
 - **Strict verification:** Extracted items may be removed if their wording or numbers cannot be matched to the original transcript. For example, `three` may not match `3`; the `notes` field reports such removals.
 - **Handoff size:** For short transcripts, the generated artifact may be longer than the original because of its introduction and section headings. Token savings are more likely with longer conversations.
 - **Token estimation:** Token counts use the Gemma tokenizer when available. Otherwise, the service estimates approximately four characters per token.
+
+
+## 📝 Submission & Articles
+
+- **Hacktoberfest Challenge Post:** [ContextPack: shrink your prompts, hand off your chats, keep the meaning](https://dev.to/aaryanideas28/contextpack-shrink-your-prompts-hand-off-your-chats-keep-the-meaning-2lff)
+- **Live Demo:** [contextpack-sandy.vercel.app](https://contextpack-sandy.vercel.app)
